@@ -157,6 +157,9 @@ void ForwardPass<T>::Iterate(
   const cudaStream_t stream2 = data_->stream[1];
   const cudaEvent_t event = data_->event;
 
+  cudaStream_t save_stream;
+  cublasGetStream(blas_handle, &save_stream);
+
   cublasSetStream(blas_handle, stream2);
   blas<T>::gemm(blas_handle,
       CUBLAS_OP_N, CUBLAS_OP_N,
@@ -251,6 +254,8 @@ void ForwardPass<T>::Iterate(
           nullptr);
     }
   }
+
+  cublasSetStream(blas_handle, save_stream);
 }
 
 template struct ForwardPass<float>;

@@ -167,6 +167,9 @@ void BackwardPass<T>::Iterate(
   const cudaStream_t stream2 = data_->stream[1];
   const cudaEvent_t event = data_->event;
 
+  cudaStream_t save_stream;
+  cublasGetStream(blas_handle, &save_stream);
+
   // Compute launch configuration for pointwise operations kernel.
   const dim3 blockDim(32, 16);
   const dim3 gridDim(
@@ -250,6 +253,8 @@ void BackwardPass<T>::Iterate(
       dq, hidden_size * 3,
       &beta_sum,
       dh, hidden_size);
+
+  cublasSetStream(blas_handle, save_stream);
 }
 
 template struct BackwardPass<float>;
