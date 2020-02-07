@@ -67,10 +67,9 @@ def lstm_gradient(op, *grads):
   v = op.outputs[2]
 
   # Pre-transpose matrices for better performance.
-  x = tf.transpose(x, [0, 2, 1])
+  x = tf.transpose(x, [2, 0, 1])
   W = tf.transpose(W, [1, 0])
   R = tf.transpose(R, [1, 0])
-  h = tf.transpose(h, [0, 2, 1])
 
   dx, dW, dR, db = LIB.haste_lstm_grad(x, W, R, b, h, c, v, grads[0], grads[1], zoneout_mask)
   return [dx, dW, dR, db, None]
@@ -211,14 +210,13 @@ class LSTMLayer(tf.Module):
         zoneout_prob=self.zoneout)
 
     if sequence_length is not None:
-      # 0-indexed tensors, so length-1.
-      indices = sequence_length - 1
+      indices = sequence_length
       indices = tf.stack([indices, tf.range(batch_size, dtype=sequence_length.dtype)], axis=-1)
       state = rnn_cell.LSTMStateTuple(tf.gather_nd(c, indices), tf.gather_nd(h, indices))
     else:
       state = rnn_cell.LSTMStateTuple(c[-1], h[-1])
 
-    return h, state
+    return h[1:], state
 
 
 class LSTM(tf.Module):

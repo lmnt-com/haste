@@ -101,6 +101,8 @@ struct ForwardPass<T>::private_data {
   cublasHandle_t blas_handle;
   cudaStream_t stream[2];
   cudaEvent_t event;
+  cudaEvent_t ready_event;
+  cudaEvent_t finished_event;
 };
 
 template<typename T>
@@ -118,12 +120,16 @@ ForwardPass<T>::ForwardPass(
   cudaStreamCreate(&data_->stream[0]);
   cudaStreamCreate(&data_->stream[1]);
   cudaEventCreateWithFlags(&data_->event, cudaEventDisableTiming);
+  cudaEventCreateWithFlags(&data_->ready_event, cudaEventDisableTiming);
+  cudaEventCreateWithFlags(&data_->finished_event, cudaEventDisableTiming);
 }
 
 template<typename T>
 ForwardPass<T>::~ForwardPass() {
   cudaStreamSynchronize(data_->stream[1]);
   cudaStreamSynchronize(data_->stream[0]);
+  cudaEventDestroy(data_->finished_event);
+  cudaEventDestroy(data_->ready_event);
   cudaEventDestroy(data_->event);
   cudaStreamDestroy(data_->stream[1]);
   cudaStreamDestroy(data_->stream[0]);
@@ -148,12 +154,10 @@ void ForwardPass<T>::Iterate(
   static const T alpha = static_cast<T>(1.0);
   static const T beta = static_cast<T>(0.0);
 
-  const bool training = data_->training;
   const int batch_size = data_->batch_size;
   const int input_size = data_->input_size;
   const int hidden_size = data_->hidden_size;
   const cublasHandle_t blas_handle = data_->blas_handle;
-  const cudaStream_t stream1 = data_->stream[0];
   const cudaStream_t stream2 = data_->stream[1];
   const cudaEvent_t event = data_->event;
 
@@ -171,6 +175,43 @@ void ForwardPass<T>::Iterate(
       v, hidden_size * 4);
   cudaEventRecord(event, stream2);
 
+  IterateInternal(
+      R,
+      b,
+      h,
+      c,
+      h_out,
+      c_out,
+      v,
+      tmp_Rh,
+      zoneout_prob,
+      zoneout_mask);
+
+  cublasSetStream(blas_handle, save_stream);
+}
+
+template<typename T>
+void ForwardPass<T>::IterateInternal(
+    const T* R,  // Weight matrix for recurrent state (Rh) [H,H*4]
+    const T* b,  // Bias for gates (Wx + Rh + b) [H*4]
+    const T* h,  // Recurrent state [N,H]
+    const T* c,  // Cell state [N,H]
+    T* h_out,    // Output recurrent state [N,H]
+    T* c_out,    // Output cell state [N,H]
+    T* v,        // Output vector (Wx + Rh + b) [N,H*4]
+    T* tmp_Rh,   // Temporary storage for Rh vector [N,H*4]
+    const float zoneout_prob,
+    const T* zoneout_mask) { // Zoneout mask [N,H]
+  static const T alpha = static_cast<T>(1.0);
+  static const T beta = static_cast<T>(0.0);
+
+  const bool training = data_->training;
+  const int batch_size = data_->batch_size;
+  const int hidden_size = data_->hidden_size;
+  const cublasHandle_t blas_handle = data_->blas_handle;
+  const cudaStream_t stream1 = data_->stream[0];
+  const cudaEvent_t event = data_->event;
+
   cublasSetStream(blas_handle, stream1);
   blas<T>::gemm(blas_handle,
       CUBLAS_OP_N, CUBLAS_OP_N,
@@ -181,18 +222,14 @@ void ForwardPass<T>::Iterate(
       &beta,
       tmp_Rh, hidden_size * 4);
 
+  cudaStreamWaitEvent(stream1, event, 0);
+
   // Compute launch configuration for pointwise operations kernel.
-  const dim3 blockDim(32, 16);
+  const dim3 blockDim(64, 16);
   const dim3 gridDim(
       (hidden_size + blockDim.x - 1) / blockDim.x,
       (batch_size + blockDim.y - 1) / blockDim.y);
 
-  // Make sure Wx is ready (Rh is on the same stream as pointwise ops so it must be ready).
-  cudaStreamWaitEvent(stream1, event, 0);
-
-  // There's a data dependency between the output of this kernel (`h_out`) and the input of the
-  // `Rh` matmul above. Make sure both kernels run on the same stream to avoid explicit
-  // synchronization.
   if (training) {
     if (zoneout_prob && zoneout_mask) {
       PointwiseOperations<T, true, true><<<gridDim, blockDim, 0, stream1>>>(
@@ -253,6 +290,57 @@ void ForwardPass<T>::Iterate(
           0.0f,
           nullptr);
     }
+  }
+}
+
+template<typename T>
+void ForwardPass<T>::Run(
+    const int steps,
+    const T* W,  // Weight matrix for input (Wx) [C,H*4]
+    const T* R,  // Weight matrix for recurrent state (Rh) [H,H*4]
+    const T* b,  // Bias for gates (Wx + Rh + b) [H*4]
+    const T* x,  // Input vector [T,N,C]
+    T* h,        // Recurrent state [T+1,N,H]
+    T* c,        // Cell state [T+1,N,H]
+    T* v,        // Output vector (Wx + Rh + b) [T,N,H*4]
+    T* tmp_Rh,   // Temporary storage for Rh vector [N,H*4]
+    const float zoneout_prob,
+    const T* zoneout_mask) { // Zoneout mask [T,N,H]
+  static const T alpha = static_cast<T>(1.0);
+  static const T beta = static_cast<T>(0.0);
+
+  const int batch_size = data_->batch_size;
+  const int input_size = data_->input_size;
+  const int hidden_size = data_->hidden_size;
+  const cublasHandle_t blas_handle = data_->blas_handle;
+  const cudaStream_t stream1 = data_->stream[0];
+
+  cudaStream_t save_stream;
+  cublasGetStream(blas_handle, &save_stream);
+
+  cublasSetStream(blas_handle, stream1);
+  blas<T>::gemm(blas_handle,
+      CUBLAS_OP_N, CUBLAS_OP_N,
+      hidden_size * 4, steps * batch_size, input_size,
+      &alpha,
+      W, hidden_size * 4,
+      x, input_size,
+      &beta,
+      v, hidden_size * 4);
+
+  for (int i = 0; i < steps; ++i) {
+    const int NH = batch_size * hidden_size;
+    IterateInternal(
+        R,
+        b,
+        h + i * NH,
+        c + i * NH,
+        h + (i + 1) * NH,
+        c + (i + 1) * NH,
+        v + i * NH * 4,
+        tmp_Rh,
+        zoneout_prob,
+        zoneout_mask ? zoneout_mask + i * NH : nullptr);
   }
 
   cublasSetStream(blas_handle, save_stream);

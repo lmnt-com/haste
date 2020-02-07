@@ -13,8 +13,10 @@
 // limitations under the License.
 // ==============================================================================
 
+#include <algorithm>
 #include <cublas_v2.h>
 #include <cuda_runtime_api.h>
+#include <vector>
 
 #include "blas.h"
 #include "haste.h"
@@ -105,7 +107,7 @@ struct BackwardPass<T>::private_data {
   int input_size;
   int hidden_size;
   cublasHandle_t blas_handle;
-  cudaStream_t stream[2];
+  cudaStream_t stream[3];
   cudaEvent_t event;
 };
 
@@ -121,14 +123,17 @@ BackwardPass<T>::BackwardPass(
   data_->blas_handle = blas_handle;
   cudaStreamCreate(&data_->stream[0]);
   cudaStreamCreate(&data_->stream[1]);
+  cudaStreamCreate(&data_->stream[2]);
   cudaEventCreateWithFlags(&data_->event, cudaEventDisableTiming);
 }
 
 template<typename T>
 BackwardPass<T>::~BackwardPass() {
+  cudaStreamSynchronize(data_->stream[2]);
   cudaStreamSynchronize(data_->stream[1]);
   cudaStreamSynchronize(data_->stream[0]);
   cudaEventDestroy(data_->event);
+  cudaStreamDestroy(data_->stream[2]);
   cudaStreamDestroy(data_->stream[1]);
   cudaStreamDestroy(data_->stream[0]);
   delete data_;
@@ -140,9 +145,8 @@ void BackwardPass<T>::Iterate(
     const T* R_t,     // [H*4,H]
     const T* b,       // [H*4]
     const T* x_t,     // [C,N]
-    const T* h_t,     // [H,N]
+    const T* h,       // [N,H]
     const T* c,       // [N,H]
-    const T* v,       // [N,H*4]
     const T* c_new,   // [N,H]
     const T* dh_new,  // [N,H]
     const T* dc_new,  // [N,H]
@@ -152,7 +156,7 @@ void BackwardPass<T>::Iterate(
     T* db,            // [H*4]
     T* dh,            // [N,H]
     T* dc,            // [N,H]
-    T* dv,            // [N,H*4]
+    T* v,             // [N,H*4]
     const T* zoneout_mask) {
   const T alpha = static_cast<T>(1.0);
   const T beta_sum = static_cast<T>(1.0);  // Accumulate into output matrix!
@@ -162,15 +166,86 @@ void BackwardPass<T>::Iterate(
   const int input_size = data_->input_size;
   const int hidden_size = data_->hidden_size;
   const cublasHandle_t blas_handle = data_->blas_handle;
-  const cudaStream_t stream1 = data_->stream[0];
   const cudaStream_t stream2 = data_->stream[1];
+  const cudaStream_t stream3 = data_->stream[2];
   const cudaEvent_t event = data_->event;
 
   cudaStream_t save_stream;
   cublasGetStream(blas_handle, &save_stream);
 
+  IterateInternal(
+      R_t,
+      c,
+      c_new,
+      dh_new,
+      dc_new,
+      db,
+      dh,
+      dc,
+      v,
+      zoneout_mask);
+
+  // Wait for pointwise operations to complete since there's a
+  // data dependency between its output (`v`) and the following matmuls.
+  cudaStreamWaitEvent(stream2, event, 0);
+  cudaStreamWaitEvent(stream3, event, 0);
+
+  cublasSetStream(blas_handle, stream2);
+  blas<T>::gemm(blas_handle,
+      CUBLAS_OP_N, CUBLAS_OP_N,
+      input_size, batch_size, hidden_size * 4,
+      &alpha,
+      W_t, input_size,
+      v, hidden_size * 4,
+      &beta_assign,
+      dx, input_size);
+
+  cublasSetStream(blas_handle, stream3);
+  blas<T>::gemm(blas_handle,
+      CUBLAS_OP_N, CUBLAS_OP_T,
+      hidden_size * 4, hidden_size, batch_size,
+      &alpha,
+      v, hidden_size * 4,
+      h, hidden_size,
+      &beta_sum,
+      dR, hidden_size * 4);
+
+  cublasSetStream(blas_handle, stream3);
+  blas<T>::gemm(blas_handle,
+      CUBLAS_OP_N, CUBLAS_OP_N,
+      hidden_size * 4, input_size, batch_size,
+      &alpha,
+      v, hidden_size * 4,
+      x_t, batch_size,
+      &beta_sum,
+      dW, hidden_size * 4);
+
+  cublasSetStream(blas_handle, save_stream);
+}
+
+template<typename T>
+void BackwardPass<T>::IterateInternal(
+    const T* R_t,     // [H*4,H]
+    const T* c,       // [N,H]
+    const T* c_new,   // [N,H]
+    const T* dh_new,  // [N,H]
+    const T* dc_new,  // [N,H]
+    T* db,            // [H*4]
+    T* dh,            // [N,H]
+    T* dc,            // [N,H]
+    T* v,             // [N,H*4]
+    const T* zoneout_mask) {
+  const T alpha = static_cast<T>(1.0);
+  const T beta_sum = static_cast<T>(1.0);  // Accumulate into output matrix!
+
+  const int batch_size = data_->batch_size;
+  const int hidden_size = data_->hidden_size;
+  const cublasHandle_t blas_handle = data_->blas_handle;
+  const cudaStream_t stream1 = data_->stream[0];
+  const cudaEvent_t event = data_->event;
+
   // Compute launch configuration for pointwise operations kernel.
-  const dim3 blockDim(32, 16);
+  const dim3 blockDim(64, 16);
   const dim3 gridDim(
       (hidden_size + blockDim.x - 1) / blockDim.x,
       (batch_size + blockDim.y - 1) / blockDim.y);
@@ -187,7 +262,7 @@ void BackwardPass<T>::Iterate(
         db,
         dh,
         dc,
-        dv,
+        v,
         zoneout_mask
     );
   } else {
@@ -202,58 +277,107 @@ void BackwardPass<T>::Iterate(
         db,
         dh,
         dc,
-        dv,
+        v,
         nullptr
     );
   }
+
+  // Signal completion of pointwise operations for data-dependent streams.
   cudaEventRecord(event, stream1);
 
-  // Wait for pointwise operations to complete since there's a
-  // data dependency between its output (`dv`) and the following matmuls.
-  cudaStreamWaitEvent(stream2, event, 0);
-
   cublasSetStream(blas_handle, stream1);
-  blas<T>::gemm(blas_handle,
-      CUBLAS_OP_N, CUBLAS_OP_N,
-      hidden_size * 4, input_size, batch_size,
-      &alpha,
-      dv, hidden_size * 4,
-      x_t, batch_size,
-      &beta_sum,
-      dW, hidden_size * 4);
-
-  cublasSetStream(blas_handle, stream2);
-  blas<T>::gemm(blas_handle,
-      CUBLAS_OP_N, CUBLAS_OP_N,
-      input_size, batch_size, hidden_size * 4,
-      &alpha,
-      W_t, input_size,
-      dv, hidden_size * 4,
-      &beta_assign,
-      dx, input_size);
-
-  cublasSetStream(blas_handle, stream2);
-  blas<T>::gemm(blas_handle,
-      CUBLAS_OP_N, CUBLAS_OP_N,
-      hidden_size * 4, hidden_size, batch_size,
-      &alpha,
-      dv, hidden_size * 4,
-      h_t, batch_size,
-      &beta_sum,
-      dR, hidden_size * 4);
-
-  // There's a data dependency between the output of this kernel (`dh`) and the input to
-  // the pointwise op kernel above (`dh`). Make sure both kernels run on the same stream
-  // to avoid explicit stream synchronization.
-  cublasSetStream(blas_handle,  stream1);
   blas<T>::gemm(blas_handle,
       CUBLAS_OP_N, CUBLAS_OP_N,
       hidden_size, batch_size, hidden_size * 4,
       &alpha,
       R_t, hidden_size,
-      dv, hidden_size * 4,
+      v, hidden_size * 4,
       &beta_sum,
       dh, hidden_size);
+}
+
+template<typename T>
+void BackwardPass<T>::Run(
+    const int steps,
+    const T* W_t,     // [H*4,C]
+    const T* R_t,     // [H*4,H]
+    const T* b,       // [H*4]
+    const T* x_t,     // [C,T,N]
+    const T* h,       // [T+1,N,H]
+    const T* c,       // [T+1,N,H]
+    const T* dh_new,  // [T+1,N,H]
+    const T* dc_new,  // [T+1,N,H]
+    T* dx,            // [T,N,C]
+    T* dW,            // [C,H*4]
+    T* dR,            // [H,H*4]
+    T* db,            // [H*4]
+    T* dh,            // [N,H]
+    T* dc,            // [N,H]
+    T* v,            // [T,N,H*4]
+    const T* zoneout_mask) {
+  const T alpha = static_cast<T>(1.0);
+  const T beta_sum = static_cast<T>(1.0);  // Accumulate into output matrix!
+  const T beta_assign = static_cast<T>(0.0);
+
+  const int batch_size = data_->batch_size;
+  const int input_size = data_->input_size;
+  const int hidden_size = data_->hidden_size;
+  const cublasHandle_t blas_handle = data_->blas_handle;
+  const cudaStream_t stream1 = data_->stream[0];
+  const cudaStream_t stream2 = data_->stream[1];
+  const cudaStream_t stream3 = data_->stream[2];
+  const cudaEvent_t event = data_->event;
+
+  cudaStream_t save_stream;
+  cublasGetStream(blas_handle, &save_stream);
+
+  const int NH = batch_size * hidden_size;
+  for (int i = steps - 1; i >= 0; --i) {
+    IterateInternal(
+        R_t,
+        c + i * NH,
+        c + (i + 1) * NH,
+        dh_new + (i + 1) * NH,
+        dc_new + (i + 1) * NH,
+        db,
+        dh,
+        dc,
+        v + i * NH * 4,
+        zoneout_mask ? zoneout_mask + i * NH : nullptr);
+  }
+  cudaEventRecord(event, stream1);
+
+  cudaStreamWaitEvent(stream2, event, 0);
+  cublasSetStream(blas_handle, stream2);
+  blas<T>::gemm(blas_handle,
+      CUBLAS_OP_N, CUBLAS_OP_N,
+      hidden_size * 4, input_size, batch_size * steps,
+      &alpha,
+      v, hidden_size * 4,
+      x_t, batch_size * steps,
+      &beta_sum,
+      dW, hidden_size * 4);
+
+  cudaStreamWaitEvent(stream3, event, 0);
+  cublasSetStream(blas_handle, stream1);
+  blas<T>::gemm(blas_handle,
+      CUBLAS_OP_N, CUBLAS_OP_T,
+      hidden_size * 4, hidden_size, batch_size * steps,
+      &alpha,
+      v, hidden_size * 4,
+      h, hidden_size,
+      &beta_sum,
+      dR, hidden_size * 4);
+
+  cublasSetStream(blas_handle, stream1);
+  blas<T>::gemm(blas_handle,
+      CUBLAS_OP_N, CUBLAS_OP_N,
+      input_size, steps * batch_size, hidden_size * 4,
+      &alpha,
+      W_t, input_size,
+      v, hidden_size * 4,
+      &beta_assign,
+      dx, input_size);
 
   cublasSetStream(blas_handle, save_stream);
 }

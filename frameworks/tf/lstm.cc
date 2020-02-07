@@ -98,12 +98,14 @@ REGISTER_OP("HasteLstm")
       const DimensionHandle time_steps = c->Dim(input_shape, 0);
       const DimensionHandle batch_size = c->Dim(input_shape, 1);
       const DimensionHandle hidden_size = c->Dim(recurrent_shape, 0);
+      DimensionHandle time_steps_plus_1;
       DimensionHandle hidden_size_4;
 
+      TF_RETURN_IF_ERROR(c->Add(time_steps, 1, &time_steps_plus_1));
       TF_RETURN_IF_ERROR(c->Multiply(hidden_size, 4, &hidden_size_4));
 
-      c->set_output(0, c->MakeShape({ time_steps, batch_size, hidden_size }));
-      c->set_output(1, c->MakeShape({ time_steps, batch_size, hidden_size }));
+      c->set_output(0, c->MakeShape({ time_steps_plus_1, batch_size, hidden_size }));
+      c->set_output(1, c->MakeShape({ time_steps_plus_1, batch_size, hidden_size }));
       c->set_output(2, c->MakeShape({ time_steps, batch_size, hidden_size_4 }));
       return Status::OK();
     });
@@ -136,7 +138,7 @@ struct HasteLstmOp : public OpKernel {
         errors::InvalidArgument("input[2] and kernel[0] dimensions must match. Found ",
             input_size, " and ", kernel.shape().dim_size(0)));
 
-    const TensorShape output_shape = { time_steps, batch_size, hidden_size };
+    const TensorShape output_shape = { time_steps + 1, batch_size, hidden_size };
     const TensorShape activations_shape = { time_steps, batch_size, hidden_size * 4 };
 
     Tensor* output = nullptr;
@@ -161,6 +163,7 @@ struct HasteLstmOp : public OpKernel {
     const TensorShape tmp_Rh_shape = { batch_size, 4 * hidden_size };
     OP_REQUIRES_OK(context, context->allocate_temp(data_type, tmp_Rh_shape, &tmp_Rh));
     cudaMemset(output->flat<T>().data(), 0, output->AllocatedBytes());
+    cudaMemset(output_cell_state->flat<T>().data(), 0, output_cell_state->AllocatedBytes());
 
     ForwardPass<T> forward = ForwardPass<T>(
         training_,
@@ -169,30 +172,18 @@ struct HasteLstmOp : public OpKernel {
         hidden_size,
         GetCublasHandle());
 
-    Tensor h = output->SubSlice(0);
-    Tensor c = output->SubSlice(0);
-    for (int64 i = 0; i < time_steps; ++i) {
-      Tensor x = input.SubSlice(i);
-      Tensor new_h = output->SubSlice(i);
-      Tensor new_c = output_cell_state->SubSlice(i);
-      Tensor v = output_v->SubSlice(i);
-
-      forward.Iterate(
-          kernel.flat<T>().data(),
-          recurrent_kernel.flat<T>().data(),
-          bias.flat<T>().data(),
-          x.unaligned_flat<T>().data(),
-          h.unaligned_flat<T>().data(),
-          c.unaligned_flat<T>().data(),
-          new_h.unaligned_flat<T>().data(),
-          new_c.unaligned_flat<T>().data(),
-          v.unaligned_flat<T>().data(),
-          tmp_Rh.flat<T>().data(),
-          has_zoneout ? zoneout_prob_ : 0.0f,
-          has_zoneout ? zoneout_mask.SubSlice(i).unaligned_flat<T>().data() : nullptr);
-      h = new_h;
-      c = new_c;
-    }
+    forward.Run(
+        time_steps,
+        kernel.flat<T>().data(),
+        recurrent_kernel.flat<T>().data(),
+        bias.flat<T>().data(),
+        input.flat<T>().data(),
+        output->flat<T>().data(),
+        output_cell_state->flat<T>().data(),
+        output_v->flat<T>().data(),
+        tmp_Rh.flat<T>().data(),
+        has_zoneout ? zoneout_prob_ : 0.0f,
+        has_zoneout ? zoneout_mask.flat<T>().data() : nullptr);
   }
 
   private:
@@ -205,11 +196,11 @@ REGISTER_GPU_KERNEL(HasteLstm, double);
 
 REGISTER_OP("HasteLstmGrad")
     .Attr("R: {float, double}")
-    .Input("x_t: R")                   // [T,C,N]
+    .Input("x_t: R")                   // [C,N,T]
     .Input("kernel_t: R")              // [H*4,C]
     .Input("recurrent_kernel_t: R")    // [H*4,H]
     .Input("bias: R")                  // [H*4]
-    .Input("h_t: R")                   // [T,H,N]
+    .Input("h: R")                     // [T,N,H]
     .Input("c: R")                     // [T,N,H]
     .Input("v: R")                     // [T,N,H*4]
     .Input("dh_new: R")                // [T,N,H]
@@ -242,8 +233,8 @@ REGISTER_OP("HasteLstmGrad")
       TF_RETURN_IF_ERROR(c->WithRank(c->input(8), 3, &dc_new_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(9), 3, &zoneout_mask_shape));
 
-      DimensionHandle time_steps = c->Dim(x_shape, 0);
-      DimensionHandle input_size = c->Dim(x_shape, 1);
+      DimensionHandle input_size = c->Dim(x_shape, 0);
+      DimensionHandle time_steps = c->Dim(x_shape, 1);
       DimensionHandle batch_size = c->Dim(x_shape, 2);
       DimensionHandle hidden_size = c->Dim(recurrent_kernel_shape, 1);
 
@@ -270,8 +261,8 @@ struct HasteLstmGradOp : public OpKernel {
     const Tensor& dc_new = context->input(8);
     const Tensor& zoneout_mask = context->input(9);
 
-    const auto time_steps = input.shape().dim_size(0);
-    const auto input_size = input.shape().dim_size(1);
+    const auto input_size = input.shape().dim_size(0);
+    const auto time_steps = input.shape().dim_size(1);
     const auto batch_size = input.shape().dim_size(2);
     const auto hidden_size = recurrent_kernel.shape().dim_size(1);
     const bool has_zoneout = !!zoneout_mask.NumElements();
@@ -307,22 +298,15 @@ struct HasteLstmGradOp : public OpKernel {
     Tensor dc;
     OP_REQUIRES_OK(context, context->allocate_temp(data_type, dc_shape, &dc));
 
-    // Can be uninitialized. Output only, no accumulation.
-    const TensorShape dv_shape = { time_steps, batch_size, hidden_size * 4 };
     Tensor dv;
-    OP_REQUIRES_OK(context, context->allocate_temp(data_type, dv_shape, &dv));
-
-    // Needs to be initialized to 0.
-    const TensorShape zero_vector_shape = { batch_size, hidden_size };
-    Tensor zero_vector;
-    OP_REQUIRES_OK(context, context->allocate_temp(data_type, zero_vector_shape, &zero_vector));
+    OP_REQUIRES_OK(context,
+        context->forward_input_or_allocate_temp({ 6 }, data_type, v_vector.shape(), &dv));
 
     cudaMemset(dW->flat<T>().data(), 0, dW->AllocatedBytes());
     cudaMemset(dR->flat<T>().data(), 0, dR->AllocatedBytes());
     cudaMemset(db->flat<T>().data(), 0, db->AllocatedBytes());
     cudaMemset(dh.flat<T>().data(), 0, dh.AllocatedBytes());
     cudaMemset(dc.flat<T>().data(), 0, dc.AllocatedBytes());
-    cudaMemset(zero_vector.flat<T>().data(), 0, zero_vector.AllocatedBytes());
 
     BackwardPass<T> backward = BackwardPass<T>(
         batch_size,
@@ -330,43 +314,24 @@ struct HasteLstmGradOp : public OpKernel {
         hidden_size,
         GetCublasHandle());
 
-    for (int64 i = time_steps - 1; i >= 0; --i) {
-      Tensor x = input.SubSlice(i);
-
-      // These are slices of cell outputs so we use (i - 1) to get the
-      // cell inputs (i.e., h_t is the output of the t'th LSTM cell
-      // which is also the input to the t+1'th cell).
-      Tensor h = i != 0 ? h_vector.SubSlice(i - 1) : zero_vector;
-      Tensor c = i != 0 ? c_vector.SubSlice(i - 1) : zero_vector;
-      Tensor v = v_vector.SubSlice(i);
-
-      Tensor c_new = c_vector.SubSlice(i);
-      Tensor dh_new_cur = dh_new.SubSlice(i);
-      Tensor dc_new_cur = dc_new.SubSlice(i);
-
-      Tensor dx_cur = dx->SubSlice(i);
-      Tensor dv_cur = dv.SubSlice(i);
-
-      backward.Iterate(
-          kernel.flat<T>().data(),
-          recurrent_kernel.flat<T>().data(),
-          bias.flat<T>().data(),
-          x.unaligned_flat<T>().data(),
-          h.unaligned_flat<T>().data(),
-          c.unaligned_flat<T>().data(),
-          v.unaligned_flat<T>().data(),
-          c_new.unaligned_flat<T>().data(),
-          dh_new_cur.unaligned_flat<T>().data(),
-          dc_new_cur.unaligned_flat<T>().data(),
-          dx_cur.unaligned_flat<T>().data(),
-          dW->flat<T>().data(),
-          dR->flat<T>().data(),
-          db->flat<T>().data(),
-          dh.flat<T>().data(),
-          dc.flat<T>().data(),
-          dv_cur.unaligned_flat<T>().data(),
-          has_zoneout ? zoneout_mask.SubSlice(i).unaligned_flat<T>().data() : nullptr);
-    }
+    backward.Run(
+        time_steps,
+        kernel.flat<T>().data(),
+        recurrent_kernel.flat<T>().data(),
+        bias.flat<T>().data(),
+        input.flat<T>().data(),
+        h_vector.flat<T>().data(),
+        c_vector.flat<T>().data(),
+        dh_new.flat<T>().data(),
+        dc_new.flat<T>().data(),
+        dx->flat<T>().data(),
+        dW->flat<T>().data(),
+        dR->flat<T>().data(),
+        db->flat<T>().data(),
+        dh.flat<T>().data(),
+        dc.flat<T>().data(),
+        dv.flat<T>().data(),
+        has_zoneout ? zoneout_mask.flat<T>().data() : nullptr);
   }
 };
 
