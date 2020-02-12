@@ -25,7 +25,7 @@ class BinaryDistribution(Distribution):
 
 
 setup(name = 'haste_tf',
-    version = '0.1.0',
+    version = '0.2.0',
     description = 'Haste: a fast, simple, and open RNN library.',
     author = 'LMNT, Inc.',
     author_email = 'haste@lmnt.com',
