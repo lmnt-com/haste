@@ -10,14 +10,46 @@ What's included in this project?
 - a standalone C++ API (`libhaste`)
 - a TensorFlow Python API (`haste_tf`)
 - examples for writing your own custom C++ inference / training code using `libhaste`
+- benchmarking programs to evaluate the performance of RNN implementations
 
 For questions or feedback about Haste, please open an issue on GitHub or send us an email at [haste@lmnt.com](mailto:haste@lmnt.com).
 
+## Performance
+Our LSTM benchmark indicates that Haste has the fastest publicly available implementation for nearly all problem sizes.
+<table>
+  <tr><td><img src="https://lmnt.com/assets/haste/benchmark/report_n=16_c=128.png"></td><td><img src="https://lmnt.com/assets/haste/benchmark/report_n=32_c=256.png"></td></tr>
+  <tr></tr>
+  <tr><td><img src="https://lmnt.com/assets/haste/benchmark/report_n=64_c=128.png"></td><td><img src="https://lmnt.com/assets/haste/benchmark/report_n=128_c=256.png"></td></tr>
+</table>
+
+Here is our complete benchmark result grid:
+<br>
+[`N=1 C=64`](https://lmnt.com/assets/haste/benchmark/report_n=1_c=64.png)
+[`N=1 C=128`](https://lmnt.com/assets/haste/benchmark/report_n=1_c=128.png)
+[`N=1 C=256`](https://lmnt.com/assets/haste/benchmark/report_n=1_c=256.png)
+[`N=1 C=512`](https://lmnt.com/assets/haste/benchmark/report_n=1_c=512.png)
+<br>
+[`N=32 C=64`](https://lmnt.com/assets/haste/benchmark/report_n=32_c=64.png)
+[`N=32 C=128`](https://lmnt.com/assets/haste/benchmark/report_n=32_c=128.png)
+[`N=32 C=256`](https://lmnt.com/assets/haste/benchmark/report_n=32_c=256.png)
+[`N=32 C=512`](https://lmnt.com/assets/haste/benchmark/report_n=32_c=512.png)
+<br>
+[`N=64 C=64`](https://lmnt.com/assets/haste/benchmark/report_n=64_c=64.png)
+[`N=64 C=128`](https://lmnt.com/assets/haste/benchmark/report_n=64_c=128.png)
+[`N=64 C=256`](https://lmnt.com/assets/haste/benchmark/report_n=64_c=256.png)
+[`N=64 C=512`](https://lmnt.com/assets/haste/benchmark/report_n=64_c=512.png)
+<br>
+[`N=128 C=64`](https://lmnt.com/assets/haste/benchmark/report_n=128_c=64.png)
+[`N=128 C=128`](https://lmnt.com/assets/haste/benchmark/report_n=128_c=128.png)
+[`N=128 C=256`](https://lmnt.com/assets/haste/benchmark/report_n=128_c=256.png)
+[`N=128 C=512`](https://lmnt.com/assets/haste/benchmark/report_n=128_c=512.png)
+
 ## Install
 Here's what you'll need to get started:
-- a [CUDA Compute Capability](https://developer.nvidia.com/cuda-gpus) 6.0+ GPU
-- [TensorFlow GPU](https://www.tensorflow.org/install/gpu) 1.14+ or 2.0+ for TensorFlow integration
-- [Eigen 3](http://eigen.tuxfamily.org/) to build the C++ examples
+- a [CUDA Compute Capability](https://developer.nvidia.com/cuda-gpus) 6.0+ GPU (required)
+- [TensorFlow GPU](https://www.tensorflow.org/install/gpu) 1.14+ or 2.0+ for TensorFlow integration (optional)
+- [Eigen 3](http://eigen.tuxfamily.org/) to build the C++ examples (optional)
+- [cuDNN Developer Library](https://developer.nvidia.com/rdp/cudnn-archive) to build benchmarking programs (optional)
 
 Once you have the prerequisites, run the following to build the code and install the TensorFlow API:
 ```
@@ -41,6 +73,7 @@ The TensorFlow Python API is documented in [`docs/tf/haste_tf.md`](docs/tf/haste
 The C++ API is documented in [`lib/haste.h`](lib/haste.h) and there are code samples in [`examples/`](examples/).
 
 ## Code layout
+- [`benchmarks/`](benchmarks): programs to evaluate performance of RNN implementations
 - [`docs/tf/`](docs/tf): API reference documentation for `haste_tf`
 - [`examples/`](examples): examples for writing your own C++ inference / training code using `libhaste`
 - [`frameworks/tf/`](frameworks/tf): TensorFlow Python API and custom op code
