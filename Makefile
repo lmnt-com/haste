@@ -7,9 +7,9 @@ LOCAL_CFLAGS := -I/usr/include/eigen3 -I/usr/local/cuda/include -Ilib -O3
 LOCAL_LDFLAGS := -L/usr/local/cuda/lib64 -L. -lcudart -lcublas
 
 # Small enough project that we can just recompile all the time.
-.PHONY: all haste haste_tf examples clean
+.PHONY: all haste haste_tf examples benchmarks clean
 
-all: haste haste_tf examples
+all: haste haste_tf examples benchmarks
 
 haste:
 	$(NVCC) -std=c++11 -arch=sm_60 -c lib/lstm_forward_gpu.cu.cc -o lib/lstm_forward_gpu.o -x cu -Xcompiler -fPIC $(LOCAL_CFLAGS)
@@ -35,6 +35,9 @@ examples: haste
 	$(CXX) -std=c++11 examples/lstm.cc libhaste.a $(LOCAL_CFLAGS) $(LOCAL_LDFLAGS) -o haste_lstm -Wno-ignored-attributes
 	$(CXX) -std=c++11 examples/gru.cc libhaste.a $(LOCAL_CFLAGS) $(LOCAL_LDFLAGS) -o haste_gru -Wno-ignored-attributes
 
+benchmarks: haste
+	$(CXX) -std=c++11 benchmarks/benchmark_lstm.cc libhaste.a $(LOCAL_CFLAGS) $(LOCAL_LDFLAGS) -o benchmark_lstm -Wno-ignored-attributes -lcudnn
+
 clean:
-	rm -fr haste_lstm haste_gru build haste_*.whl
+	rm -fr benchmark_lstm haste_lstm haste_gru build haste_*.whl
 	find . \( -iname '*.o' -o -iname '*.so' -o -iname '*.a' \) -delete
