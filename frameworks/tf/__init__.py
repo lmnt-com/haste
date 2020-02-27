@@ -20,6 +20,7 @@ Haste: a fast, simple, and open RNN library.
 
 from .gru import GRU
 from .gru_cell import GRUCell
+from .layer_norm import LayerNorm
 from .lstm import LSTM
 from .zoneout_wrapper import ZoneoutWrapper
 
@@ -27,6 +28,7 @@ from .zoneout_wrapper import ZoneoutWrapper
 __all__ = [
     'GRU',
     'GRUCell',
+    'LayerNorm',
     'LSTM',
     'ZoneoutWrapper'
 ]

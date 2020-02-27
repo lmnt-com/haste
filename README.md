@@ -88,6 +88,7 @@ The C++ API is documented in [`lib/haste.h`](lib/haste.h) and there are code sam
 1. Cho, K., van Merrienboer, B., Gulcehre, C., Bahdanau, D., Bougares, F., Schwenk, H., & Bengio, Y. (2014). Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation. _arXiv:1406.1078 [cs, stat]_. http://arxiv.org/abs/1406.1078.
 1. Wan, L., Zeiler, M., Zhang, S., Cun, Y. L., & Fergus, R. (2013). Regularization of Neural Networks using DropConnect. In _International Conference on Machine Learning_ (pp. 1058–1066). Presented at the International Conference on Machine Learning. http://proceedings.mlr.press/v28/wan13.html.
 1. Krueger, D., Maharaj, T., Kramár, J., Pezeshki, M., Ballas, N., Ke, N. R., et al. (2017). Zoneout: Regularizing RNNs by Randomly Preserving Hidden Activations. _arXiv:1606.01305 [cs]_. http://arxiv.org/abs/1606.01305.
+1. Ba, J., Kiros, J.R., & Hinton, G.E. (2016). Layer Normalization. _arXiv:1607.06450 [stat]_. https://arxiv.org/abs/1607.06450.
 
 ## Citing this work
 To cite this work, please use the following BibTeX entry:

@@ -433,5 +433,60 @@ class BackwardPass {
 };
 
 }  // namespace gru
+namespace layer_norm {
+
+template<typename T>
+class ForwardPass {
+  public:
+    ForwardPass(
+        const int batch_size,
+        const int hidden_size);
+
+    // Computes the layer norm of an input tensor `x` over its innermost (fastest changing)
+    // dimension. The layer norm is defined as: \(\frac{x-\mu}{\sigma} \alpha + \beta\)
+    // where `\alpha` and `\beta` are trainable parameters.
+    //
+    // alpha: [H]
+    // beta: [H]
+    // x: [N,H]
+    // y: [N,H]
+    // cache: [N,2]
+    void Run(
+        const cudaStream_t& stream,
+        const T* alpha,
+        const T* beta,
+        const T* x,
+        T* y,
+        T* cache);
+
+  private:
+    const int batch_size_;
+    const int hidden_size_;
+};
+
+template<typename T>
+class BackwardPass {
+  public:
+    BackwardPass(
+        const int batch_size,
+        const int hidden_size);
+
+    void Run(
+        const cudaStream_t& stream,
+        const T* alpha,
+        const T* beta,
+        const T* x,
+        const T* dy,
+        T* dalpha,
+        T* dbeta,
+        T* dx,
+        T* cache);
+
+  private:
+    const int batch_size_;
+    const int hidden_size_;
+};
+
+}  // namespace layer_norm
 }  // namespace v0
 }  // namespace haste

@@ -16,14 +16,17 @@ haste:
 	$(NVCC) -std=c++11 -arch=sm_60 -c lib/lstm_backward_gpu.cu.cc -o lib/lstm_backward_gpu.o -x cu -Xcompiler -fPIC $(LOCAL_CFLAGS)
 	$(NVCC) -std=c++11 -arch=sm_60 -c lib/gru_forward_gpu.cu.cc -o lib/gru_forward_gpu.o -x cu -Xcompiler -fPIC $(LOCAL_CFLAGS)
 	$(NVCC) -std=c++11 -arch=sm_60 -c lib/gru_backward_gpu.cu.cc -o lib/gru_backward_gpu.o -x cu -Xcompiler -fPIC $(LOCAL_CFLAGS)
-	$(AR) -crv libhaste.a lib/lstm_forward_gpu.o lib/lstm_backward_gpu.o lib/gru_forward_gpu.o lib/gru_backward_gpu.o
+	$(NVCC) -std=c++11 -arch=sm_60 -c lib/layer_norm_forward_gpu.cu.cc -o lib/layer_norm_forward_gpu.o -x cu -Xcompiler -fPIC $(LOCAL_CFLAGS)
+	$(NVCC) -std=c++11 -arch=sm_60 -c lib/layer_norm_backward_gpu.cu.cc -o lib/layer_norm_backward_gpu.o -x cu -Xcompiler -fPIC $(LOCAL_CFLAGS)
+	$(AR) -crv libhaste.a lib/*.o
 
 haste_tf: haste
 	$(eval TF_CFLAGS := $(shell $(PYTHON) -c 'import tensorflow as tf; print(" ".join(tf.sysconfig.get_compile_flags()))'))
 	$(eval TF_LDFLAGS := $(shell $(PYTHON) -c 'import tensorflow as tf; print(" ".join(tf.sysconfig.get_link_flags()))'))
 	$(CXX) -std=c++11 -c frameworks/tf/lstm.cc -o frameworks/tf/lstm.o $(LOCAL_CFLAGS) $(TF_CFLAGS) -fPIC
 	$(CXX) -std=c++11 -c frameworks/tf/gru.cc -o frameworks/tf/gru.o $(LOCAL_CFLAGS) $(TF_CFLAGS) -fPIC
-	$(CXX) -shared frameworks/tf/lstm.o frameworks/tf/gru.o libhaste.a -o frameworks/tf/libhaste_tf.so $(LOCAL_LDFLAGS) $(TF_LDFLAGS) -fPIC
+	$(CXX) -std=c++11 -c frameworks/tf/layer_norm.cc -o frameworks/tf/layer_norm.o $(LOCAL_CFLAGS) $(TF_CFLAGS) -fPIC
+	$(CXX) -shared frameworks/tf/lstm.o frameworks/tf/gru.o frameworks/tf/layer_norm.o libhaste.a -o frameworks/tf/libhaste_tf.so $(LOCAL_LDFLAGS) $(TF_LDFLAGS) -fPIC
 	@$(eval TMP := $(shell mktemp -d))
 	@cp -r frameworks/tf $(TMP)
 	@cp setup.py $(TMP)
