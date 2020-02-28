@@ -14,6 +14,7 @@
 // ==============================================================================
 
 #include "haste.h"
+#include "support.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/shape_inference.h"
@@ -28,18 +29,6 @@ using tensorflow::se::Stream;
 using tensorflow::shape_inference::DimensionHandle;
 using tensorflow::shape_inference::InferenceContext;
 using tensorflow::shape_inference::ShapeHandle;
-
-#define REGISTER_GPU_KERNEL(NAME, T)                 \
-  REGISTER_KERNEL_BUILDER(Name(#NAME)                \
-                            .Device(DEVICE_GPU)      \
-                            .TypeConstraint<T>("R"), \
-                          NAME##Op<T>)
-
-static const cudaStream_t& GetCudaStream(OpKernelContext* context) {
-  const auto ptr =
-      context->op_device_context()->stream()->implementation()->GpuStreamMemberHack();
-  return *reinterpret_cast<const cudaStream_t*>(ptr);
-}
 
 REGISTER_OP("HasteLayerNorm")
     .Attr("R: {float, double}")

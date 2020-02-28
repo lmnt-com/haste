@@ -14,9 +14,9 @@
 // ==============================================================================
 
 #include <cuda_runtime_api.h>
-#include <vector>
 
 #include "haste.h"
+#include "support.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/shape_inference.h"
@@ -31,43 +31,6 @@ using tensorflow::se::Stream;
 using tensorflow::shape_inference::DimensionHandle;
 using tensorflow::shape_inference::InferenceContext;
 using tensorflow::shape_inference::ShapeHandle;
-
-#define REGISTER_GPU_KERNEL(NAME, T)                 \
-  REGISTER_KERNEL_BUILDER(Name(#NAME)                \
-                            .Device(DEVICE_GPU)      \
-                            .TypeConstraint<T>("R"), \
-                          NAME##Op<T>)
-
-// LOL.
-struct CublasHandleContainer {
-  CublasHandleContainer() {
-    int count;
-    int current_device;
-    cudaGetDevice(&current_device);
-    cudaGetDeviceCount(&count);
-    for (int i = 0; i < count; ++i) {
-      cublasHandle_t handle;
-      cudaSetDevice(i);
-      cublasCreate(&handle);
-      handles.push_back(handle);
-    }
-    cudaSetDevice(current_device);
-  }
-
-  ~CublasHandleContainer() {
-    for (auto h : handles)
-      cublasDestroy(h);
-  }
-
-  std::vector<cublasHandle_t> handles;
-};
-
-static cublasHandle_t GetCublasHandle() {
-  static CublasHandleContainer all_handles;
-  int device;
-  cudaGetDevice(&device);
-  return all_handles.handles[device];
-}
 
 // Define the interface and shape function for the op.
 REGISTER_OP("HasteGru")
