@@ -96,22 +96,27 @@ namespace v0 {
 namespace layer_norm {
 
 template<typename T>
-BackwardPass<T>::BackwardPass(const int batch_size, const int hidden_size)
-    : batch_size_(batch_size),
-      hidden_size_(hidden_size) {
-}
-
-template<typename T>
-void BackwardPass<T>::Run(
-    const cudaStream_t& stream,
+BackwardPass<T>::BackwardPass(
+    const int batch_size,
+    const int hidden_size,
     const T* alpha,
     const T* beta,
     const T* x,
-    const T* dy,
     T* dalpha,
     T* dbeta,
-    T* dx,
-    T* cache) {
+    T* cache)
+        : batch_size_(batch_size),
+          hidden_size_(hidden_size),
+          alpha_(alpha),
+          beta_(beta),
+          x_(x),
+          dalpha_(dalpha),
+          dbeta_(dbeta),
+          cache_(cache) {
+}
+
+template<typename T>
+void BackwardPass<T>::Run(const cudaStream_t& stream, const T* dy, T* dx) {
   dim3 blockDim(4, 256);
   dim3 gridDim;
   gridDim.x = (batch_size_ + blockDim.x - 1) / blockDim.x;
@@ -119,14 +124,14 @@ void BackwardPass<T>::Run(
   LayerNormGrad<T><<<gridDim, blockDim, shared_mem_size, stream>>>(
       batch_size_,
       hidden_size_,
-      alpha,
-      beta,
-      x,
+      alpha_,
+      beta_,
+      x_,
       dy,
-      dalpha,
-      dbeta,
+      dalpha_,
+      dbeta_,
       dx,
-      cache);
+      cache_);
 }
 
 template class BackwardPass<float>;

@@ -88,19 +88,21 @@ namespace v0 {
 namespace layer_norm {
 
 template<typename T>
-ForwardPass<T>::ForwardPass(const int batch_size, const int hidden_size)
-    : batch_size_(batch_size),
-      hidden_size_(hidden_size) {
+ForwardPass<T>::ForwardPass(
+    const int batch_size,
+    const int hidden_size,
+    const T* alpha,
+    const T* beta,
+    T* cache)
+        : batch_size_(batch_size),
+          hidden_size_(hidden_size),
+          alpha_(alpha),
+          beta_(beta),
+          cache_(cache) {
 }
 
 template<typename T>
-void ForwardPass<T>::Run(
-    const cudaStream_t& stream,
-    const T* alpha,
-    const T* beta,
-    const T* x,
-    T* y,
-    T* cache) {
+void ForwardPass<T>::Run(const cudaStream_t& stream, const T* x, T* y) {
   dim3 blockDim(4, 256);
   dim3 gridDim;
   gridDim.x = (batch_size_ + blockDim.x - 1) / blockDim.x;
@@ -108,11 +110,11 @@ void ForwardPass<T>::Run(
   LayerNorm<T><<<gridDim, blockDim, shared_mem_size, stream>>>(
       batch_size_,
       hidden_size_,
-      alpha,
-      beta,
+      alpha_,
+      beta_,
       x,
       y,
-      cache);
+      cache_);
 }
 
 template class ForwardPass<float>;

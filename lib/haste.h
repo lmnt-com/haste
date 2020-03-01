@@ -28,3 +28,4 @@
 #include "haste/lstm.h"
 #include "haste/gru.h"
 #include "haste/layer_norm.h"
+#include "haste/layer_norm_lstm.h"

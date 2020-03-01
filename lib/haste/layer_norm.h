@@ -24,30 +24,30 @@ namespace layer_norm {
 template<typename T>
 class ForwardPass {
   public:
+    // alpha: [H]
+    // beta: [H]
+    // cache: [N,2]
     ForwardPass(
         const int batch_size,
-        const int hidden_size);
+        const int hidden_size,
+        const T* alpha,
+        const T* beta,
+        T* cache);
 
     // Computes the layer norm of an input tensor `x` over its innermost (fastest changing)
     // dimension. The layer norm is defined as: \(\frac{x-\mu}{\sigma} \alpha + \beta\)
     // where `\alpha` and `\beta` are trainable parameters.
     //
-    // alpha: [H]
-    // beta: [H]
     // x: [N,H]
     // y: [N,H]
-    // cache: [N,2]
-    void Run(
-        const cudaStream_t& stream,
-        const T* alpha,
-        const T* beta,
-        const T* x,
-        T* y,
-        T* cache);
+    void Run(const cudaStream_t& stream, const T* x, T* y);
 
   private:
     const int batch_size_;
     const int hidden_size_;
+    const T* alpha_;
+    const T* beta_;
+    T* cache_;
 };
 
 template<typename T>
@@ -55,22 +55,25 @@ class BackwardPass {
   public:
     BackwardPass(
         const int batch_size,
-        const int hidden_size);
-
-    void Run(
-        const cudaStream_t& stream,
+        const int hidden_size,
         const T* alpha,
         const T* beta,
         const T* x,
-        const T* dy,
         T* dalpha,
         T* dbeta,
-        T* dx,
         T* cache);
+
+    void Run(const cudaStream_t& stream, const T* dy, T* dx);
 
   private:
     const int batch_size_;
     const int hidden_size_;
+    const T* alpha_;
+    const T* beta_;
+    const T* x_;
+    T* dalpha_;
+    T* dbeta_;
+    T* cache_;
 };
 
 }  // namespace layer_norm

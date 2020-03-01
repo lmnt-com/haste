@@ -69,14 +69,14 @@ struct HasteLayerNormOp : public OpKernel {
     Tensor* cache = nullptr;
     OP_REQUIRES_OK(context, context->allocate_output(1, { batch_size, 2 }, &cache));
 
-    ForwardPass<T> forward(batch_size, hidden_size);
-    forward.Run(
-        GetCudaStream(context),
+    ForwardPass<T> forward(
+        batch_size,
+        hidden_size,
         alpha.flat<T>().data(),
         beta.flat<T>().data(),
-        x.flat<T>().data(),
-        y->flat<T>().data(),
         cache->flat<T>().data());
+
+    forward.Run(GetCudaStream(context), x.flat<T>().data(), y->flat<T>().data());
   }
 };
 
@@ -140,17 +140,17 @@ struct HasteLayerNormGradOp : public OpKernel {
     cudaMemset(dalpha->flat<T>().data(), 0, dalpha->AllocatedBytes());
     cudaMemset(dbeta->flat<T>().data(), 0, dbeta->AllocatedBytes());
 
-    BackwardPass<T> backward(batch_size, hidden_size);
-    backward.Run(
-        GetCudaStream(context),
+    BackwardPass<T> backward(
+        batch_size,
+        hidden_size,
         alpha.flat<T>().data(),
         beta.flat<T>().data(),
         x.flat<T>().data(),
-        dy.flat<T>().data(),
         dalpha->flat<T>().data(),
         dbeta->flat<T>().data(),
-        dx->flat<T>().data(),
         const_cast<T*>(cache.flat<T>().data()));
+
+    backward.Run(GetCudaStream(context), dy.flat<T>().data(), dx->flat<T>().data());
   }
 };
 
