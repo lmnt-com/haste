@@ -13,6 +13,8 @@
 // limitations under the License.
 // ==============================================================================
 
+#include <cassert>
+
 #include "haste.h"
 
 namespace {
@@ -112,26 +114,39 @@ BackwardPass<T>::BackwardPass(
           x_(x),
           dalpha_(dalpha),
           dbeta_(dbeta),
-          cache_(cache) {
+          cache_(cache),
+          partial_(batch_size) {
 }
 
 template<typename T>
 void BackwardPass<T>::Run(const cudaStream_t& stream, const T* dy, T* dx) {
+  RunPartial(stream, batch_size_, dy, dx);
+}
+
+template<typename T>
+void BackwardPass<T>::RunPartial(
+    const cudaStream_t& stream,
+    const int minibatch,
+    const T* dy,
+    T* dx) {
+  assert(partial_ - minibatch >= 0);
+
   dim3 blockDim(4, 256);
   dim3 gridDim;
-  gridDim.x = (batch_size_ + blockDim.x - 1) / blockDim.x;
+  gridDim.x = (minibatch + blockDim.x - 1) / blockDim.x;
   const int shared_mem_size = sizeof(T) * blockDim.x * blockDim.y * 3;
   LayerNormGrad<T><<<gridDim, blockDim, shared_mem_size, stream>>>(
-      batch_size_,
+      minibatch,
       hidden_size_,
       alpha_,
       beta_,
-      x_,
+      x_ + (partial_ - minibatch) * hidden_size_,
       dy,
       dalpha_,
       dbeta_,
       dx,
-      cache_);
+      cache_ + (partial_ - minibatch) * 2);
+  partial_ -= minibatch;
 }
 
 template class BackwardPass<float>;

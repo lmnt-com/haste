@@ -137,60 +137,6 @@ ForwardPass<T>::~ForwardPass() {
 }
 
 template<typename T>
-void ForwardPass<T>::Iterate(
-    const T* W,  // Weight matrix for input (Wx) [C,H*4]
-    const T* R,  // Weight matrix for recurrent state (Rh) [H,H*4]
-    const T* b,  // Bias for gates (Wx + Rh + b) [H*4]
-    const T* x,  // Input vector [N,C]
-    const T* h,  // Recurrent state [N,H]
-    const T* c,  // Cell state [N,H]
-    T* h_out,    // Output recurrent state [N,H]
-    T* c_out,    // Output cell state [N,H]
-    T* v,        // Output vector (Wx + Rh + b) [N,H*4]
-    T* tmp_Rh,   // Temporary storage for Rh vector [N,H*4]
-    const float zoneout_prob,
-    const T* zoneout_mask) { // Zoneout mask [N,H]
-  // Constants for GEMM
-  static const T alpha = static_cast<T>(1.0);
-  static const T beta = static_cast<T>(0.0);
-
-  const int batch_size = data_->batch_size;
-  const int input_size = data_->input_size;
-  const int hidden_size = data_->hidden_size;
-  const cublasHandle_t blas_handle = data_->blas_handle;
-  const cudaStream_t stream2 = data_->stream[1];
-  const cudaEvent_t event = data_->event;
-
-  cudaStream_t save_stream;
-  cublasGetStream(blas_handle, &save_stream);
-
-  cublasSetStream(blas_handle, stream2);
-  blas<T>::gemm(blas_handle,
-      CUBLAS_OP_N, CUBLAS_OP_N,
-      hidden_size * 4, batch_size, input_size,
-      &alpha,
-      W, hidden_size * 4,
-      x, input_size,
-      &beta,
-      v, hidden_size * 4);
-  cudaEventRecord(event, stream2);
-
-  IterateInternal(
-      R,
-      b,
-      h,
-      c,
-      h_out,
-      c_out,
-      v,
-      tmp_Rh,
-      zoneout_prob,
-      zoneout_mask);
-
-  cublasSetStream(blas_handle, save_stream);
-}
-
-template<typename T>
 void ForwardPass<T>::IterateInternal(
     const T* R,  // Weight matrix for recurrent state (Rh) [H,H*4]
     const T* b,  // Bias for gates (Wx + Rh + b) [H*4]
@@ -200,6 +146,8 @@ void ForwardPass<T>::IterateInternal(
     T* c_out,    // Output cell state [N,H]
     T* v,        // Output vector (Wx + Rh + b) [N,H*4]
     T* tmp_Rh,   // Temporary storage for Rh vector [N,H*4]
+    T* act_Rh,
+    layer_norm::ForwardPass<T>& layer_norm2,
     const float zoneout_prob,
     const T* zoneout_mask) { // Zoneout mask [N,H]
   static const T alpha = static_cast<T>(1.0);
@@ -220,8 +168,8 @@ void ForwardPass<T>::IterateInternal(
       R, hidden_size * 4,
       h, hidden_size,
       &beta,
-      tmp_Rh, hidden_size * 4);
-
+      act_Rh, hidden_size * 4);
+  layer_norm2.RunPartial(stream1, batch_size, act_Rh, tmp_Rh);
   cudaStreamWaitEvent(stream1, event, 0);
 
   // Compute launch configuration for pointwise operations kernel.
@@ -306,6 +254,8 @@ void ForwardPass<T>::Run(
     T* tmp_Rh,   // Temporary storage for Rh vector [N,H*4]
     layer_norm::ForwardPass<T>& layer_norm1,
     T* act_Wx_norm,
+    T* act_Rh,
+    layer_norm::ForwardPass<T>& layer_norm2,
     const float zoneout_prob,
     const T* zoneout_mask) { // Zoneout mask [T,N,H]
   static const T alpha = static_cast<T>(1.0);
@@ -329,7 +279,6 @@ void ForwardPass<T>::Run(
       x, input_size,
       &beta,
       act_Wx, hidden_size * 4);
-
   layer_norm1.Run(stream1, act_Wx, act_Wx_norm);
 
   for (int i = 0; i < steps; ++i) {
@@ -343,6 +292,8 @@ void ForwardPass<T>::Run(
         c + (i + 1) * NH,
         act_Wx_norm + i * NH * 4,
         tmp_Rh,
+        act_Rh + i * NH * 4,
+        layer_norm2,
         zoneout_prob,
         zoneout_mask ? zoneout_mask + i * NH : nullptr);
   }

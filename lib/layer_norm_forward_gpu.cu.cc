@@ -13,6 +13,8 @@
 // limitations under the License.
 // ==============================================================================
 
+#include <cassert>
+
 #include "haste.h"
 
 namespace {
@@ -98,23 +100,36 @@ ForwardPass<T>::ForwardPass(
           hidden_size_(hidden_size),
           alpha_(alpha),
           beta_(beta),
-          cache_(cache) {
+          cache_(cache),
+          partial_(0) {
 }
 
 template<typename T>
 void ForwardPass<T>::Run(const cudaStream_t& stream, const T* x, T* y) {
+  RunPartial(stream, batch_size_, x, y);
+}
+
+template<typename T>
+void ForwardPass<T>::RunPartial(
+    const cudaStream_t& stream,
+    const int minibatch,
+    const T* x,
+    T* y) {
+  assert(partial_ + minibatch <= batch_size_);
+
   dim3 blockDim(4, 256);
   dim3 gridDim;
-  gridDim.x = (batch_size_ + blockDim.x - 1) / blockDim.x;
+  gridDim.x = (minibatch + blockDim.x - 1) / blockDim.x;
   const int shared_mem_size = sizeof(T) * blockDim.x * blockDim.y;
   LayerNorm<T><<<gridDim, blockDim, shared_mem_size, stream>>>(
-      batch_size_,
+      minibatch,
       hidden_size_,
       alpha_,
       beta_,
       x,
       y,
-      cache_);
+      cache_ + partial_ * 2);
+  partial_ += minibatch;
 }
 
 template class ForwardPass<float>;

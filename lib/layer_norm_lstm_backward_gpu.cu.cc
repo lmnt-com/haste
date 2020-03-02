@@ -140,90 +140,6 @@ BackwardPass<T>::~BackwardPass() {
 }
 
 template<typename T>
-void BackwardPass<T>::Iterate(
-    const T* W_t,     // [H*4,C]
-    const T* R_t,     // [H*4,H]
-    const T* b,       // [H*4]
-    const T* x_t,     // [C,N]
-    const T* h,       // [N,H]
-    const T* c,       // [N,H]
-    const T* c_new,   // [N,H]
-    const T* dh_new,  // [N,H]
-    const T* dc_new,  // [N,H]
-    T* dx,            // [N,C]
-    T* dW,            // [C,H*4]
-    T* dR,            // [H,H*4]
-    T* db,            // [H*4]
-    T* dh,            // [N,H]
-    T* dc,            // [N,H]
-    T* v,             // [N,H*4]
-    const T* zoneout_mask) {
-  const T alpha = static_cast<T>(1.0);
-  const T beta_sum = static_cast<T>(1.0);  // Accumulate into output matrix!
-  const T beta_assign = static_cast<T>(0.0);
-
-  const int batch_size = data_->batch_size;
-  const int input_size = data_->input_size;
-  const int hidden_size = data_->hidden_size;
-  const cublasHandle_t blas_handle = data_->blas_handle;
-  const cudaStream_t stream2 = data_->stream[1];
-  const cudaStream_t stream3 = data_->stream[2];
-  const cudaEvent_t event = data_->event;
-
-  cudaStream_t save_stream;
-  cublasGetStream(blas_handle, &save_stream);
-
-  IterateInternal(
-      R_t,
-      c,
-      c_new,
-      dh_new,
-      dc_new,
-      db,
-      dh,
-      dc,
-      v,
-      zoneout_mask);
-
-  // Wait for pointwise operations to complete since there's a
-  // data dependency between its output (`v`) and the following matmuls.
-  cudaStreamWaitEvent(stream2, event, 0);
-  cudaStreamWaitEvent(stream3, event, 0);
-
-  cublasSetStream(blas_handle, stream2);
-  blas<T>::gemm(blas_handle,
-      CUBLAS_OP_N, CUBLAS_OP_N,
-      input_size, batch_size, hidden_size * 4,
-      &alpha,
-      W_t, input_size,
-      v, hidden_size * 4,
-      &beta_assign,
-      dx, input_size);
-
-  cublasSetStream(blas_handle, stream3);
-  blas<T>::gemm(blas_handle,
-      CUBLAS_OP_N, CUBLAS_OP_T,
-      hidden_size * 4, hidden_size, batch_size,
-      &alpha,
-      v, hidden_size * 4,
-      h, hidden_size,
-      &beta_sum,
-      dR, hidden_size * 4);
-
-  cublasSetStream(blas_handle, stream3);
-  blas<T>::gemm(blas_handle,
-      CUBLAS_OP_N, CUBLAS_OP_N,
-      hidden_size * 4, input_size, batch_size,
-      &alpha,
-      v, hidden_size * 4,
-      x_t, batch_size,
-      &beta_sum,
-      dW, hidden_size * 4);
-
-  cublasSetStream(blas_handle, save_stream);
-}
-
-template<typename T>
 void BackwardPass<T>::IterateInternal(
     const T* R_t,     // [H*4,H]
     const T* c,       // [N,H]
@@ -234,6 +150,8 @@ void BackwardPass<T>::IterateInternal(
     T* dh,            // [N,H]
     T* dc,            // [N,H]
     T* v,             // [N,H*4]
+    T* act_Rh,
+    layer_norm::BackwardPass<T>& layer_norm2,
     const T* zoneout_mask) {
   const T alpha = static_cast<T>(1.0);
   const T beta_sum = static_cast<T>(1.0);  // Accumulate into output matrix!
@@ -286,12 +204,13 @@ void BackwardPass<T>::IterateInternal(
   cudaEventRecord(event, stream1);
 
   cublasSetStream(blas_handle, stream1);
+  layer_norm2.RunPartial(stream1, batch_size, v, act_Rh);
   blas<T>::gemm(blas_handle,
       CUBLAS_OP_N, CUBLAS_OP_N,
       hidden_size, batch_size, hidden_size * 4,
       &alpha,
       R_t, hidden_size,
-      v, hidden_size * 4,
+      act_Rh, hidden_size * 4,
       &beta_sum,
       dh, hidden_size);
 }
@@ -316,6 +235,8 @@ void BackwardPass<T>::Run(
     T* act_Wx,        // [T,N,H*4]
     layer_norm::BackwardPass<T>& layer_norm1,
     T* act_Wx_norm,   // [T,N,H*4]
+    T* act_Rh,
+    layer_norm::BackwardPass<T>& layer_norm2,
     const T* zoneout_mask) {
   const T alpha = static_cast<T>(1.0);
   const T beta_sum = static_cast<T>(1.0);  // Accumulate into output matrix!
@@ -345,6 +266,8 @@ void BackwardPass<T>::Run(
         dh,
         dc,
         act_Wx_norm + i * NH * 4,
+        act_Rh + i * NH * 4,
+        layer_norm2,
         zoneout_mask ? zoneout_mask + i * NH : nullptr);
   }
   cudaEventRecord(event, stream1);
@@ -367,7 +290,7 @@ void BackwardPass<T>::Run(
       CUBLAS_OP_N, CUBLAS_OP_T,
       hidden_size * 4, hidden_size, batch_size * steps,
       &alpha,
-      act_Wx_norm, hidden_size * 4,
+      act_Rh, hidden_size * 4,
       h, hidden_size,
       &beta_sum,
       dR, hidden_size * 4);

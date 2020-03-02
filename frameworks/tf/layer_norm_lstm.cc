@@ -62,8 +62,8 @@ REGISTER_OP("HasteLayerNormLstm")
       TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 2, &kernel_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 2, &recurrent_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 1, &bias_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 1, &alpha_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(5), 1, &beta_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 2, &alpha_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(5), 2, &beta_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(6), 3, &zoneout_mask_shape));
 
       const DimensionHandle time_steps = c->Dim(input_shape, 0);
@@ -123,6 +123,8 @@ struct HasteLayerNormLstmOp : public OpKernel {
       { "act_Wx", activations_shape },
       { "act_Wx_norm", activations_shape },
       { "act_Wx_norm_cache", norm_cache_shape },
+      { "act_Rh", activations_shape },
+      { "act_Rh_norm_cache", norm_cache_shape }
     };
 
     Tensor* output_cache = nullptr;
@@ -132,6 +134,8 @@ struct HasteLayerNormLstmOp : public OpKernel {
     TensorView<T> act_Wx = memory["act_Wx"];
     TensorView<T> act_Wx_norm = memory["act_Wx_norm"];
     TensorView<T> act_Wx_norm_cache = memory["act_Wx_norm_cache"];
+    TensorView<T> act_Rh = memory["act_Rh"];
+    TensorView<T> act_Rh_norm_cache = memory["act_Rh_norm_cache"];
 
     Tensor tmp_Rh;
     const TensorShape tmp_Rh_shape = { batch_size, 4 * hidden_size };
@@ -143,9 +147,16 @@ struct HasteLayerNormLstmOp : public OpKernel {
     layer_norm::ForwardPass<T> layer_norm1(
         time_steps * batch_size,
         hidden_size * 4,
-        alpha.flat<T>().data(),
-        beta.flat<T>().data(),
+        alpha.SubSlice(0).unaligned_flat<T>().data(),
+        beta.SubSlice(0).unaligned_flat<T>().data(),
         act_Wx_norm_cache.data());
+
+    layer_norm::ForwardPass<T> layer_norm2(
+        time_steps * batch_size,
+        hidden_size * 4,
+        alpha.SubSlice(1).unaligned_flat<T>().data(),
+        beta.SubSlice(1).unaligned_flat<T>().data(),
+        act_Rh_norm_cache.data());
 
     layer_norm_lstm::ForwardPass<T> lstm(
         training_,
@@ -166,6 +177,8 @@ struct HasteLayerNormLstmOp : public OpKernel {
         tmp_Rh.flat<T>().data(),
         layer_norm1,
         act_Wx_norm.data(),
+        act_Rh.data(),
+        layer_norm2,
         has_zoneout ? zoneout_prob_ : 0.0f,
         has_zoneout ? zoneout_mask.flat<T>().data() : nullptr);
   }
@@ -216,8 +229,8 @@ REGISTER_OP("HasteLayerNormLstmGrad")
       TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 2, &kernel_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 2, &recurrent_kernel_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 1, &bias_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 1, &alpha_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(5), 1, &beta_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 2, &alpha_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(5), 2, &beta_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(6), 3, &h_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(7), 3, &c_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(8), 1, &cache_shape));
@@ -311,17 +324,18 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
       { "act_Wx", activations_shape },
       { "act_Wx_norm", activations_shape },
       { "act_Wx_norm_cache", norm_cache_shape },
+      { "act_Rh", activations_shape },
+      { "act_Rh_norm_cache", norm_cache_shape }
     };
 
     assert(cache_input.shape().num_elements() == memory_layout.NumElements());
 
-    Tensor cache;
-    OP_REQUIRES_OK(context,
-        context->forward_input_or_allocate_temp({ 8 }, data_type, cache_input.shape(), &cache));
-    Arena<T> memory = memory_layout.Realize(cache.flat<T>().data());
+    Arena<T> memory = memory_layout.Realize(const_cast<T*>(cache_input.flat<T>().data()));
     TensorView<T> act_Wx = memory["act_Wx"];
     TensorView<T> act_Wx_norm = memory["act_Wx_norm"];
     TensorView<T> act_Wx_norm_cache = memory["act_Wx_norm_cache"];
+    TensorView<T> act_Rh = memory["act_Rh"];
+    TensorView<T> act_Rh_norm_cache = memory["act_Rh_norm_cache"];
 
     cudaMemset(dW->flat<T>().data(), 0, dW->AllocatedBytes());
     cudaMemset(dR->flat<T>().data(), 0, dR->AllocatedBytes());
@@ -334,12 +348,22 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
     layer_norm::BackwardPass<T> layer_norm1(
         time_steps * batch_size,
         hidden_size * 4,
-        alpha.flat<T>().data(),
-        beta.flat<T>().data(),
+        alpha.SubSlice(0).unaligned_flat<T>().data(),
+        beta.SubSlice(0).unaligned_flat<T>().data(),
         act_Wx.data(),
-        dalpha->flat<T>().data(),
-        dbeta->flat<T>().data(),
+        dalpha->SubSlice(0).unaligned_flat<T>().data(),
+        dbeta->SubSlice(0).unaligned_flat<T>().data(),
         act_Wx_norm_cache.data());
+
+    layer_norm::BackwardPass<T> layer_norm2(
+        time_steps * batch_size,
+        hidden_size * 4,
+        alpha.SubSlice(1).unaligned_flat<T>().data(),
+        beta.SubSlice(1).unaligned_flat<T>().data(),
+        act_Rh.data(),
+        dalpha->SubSlice(1).unaligned_flat<T>().data(),
+        dbeta->SubSlice(1).unaligned_flat<T>().data(),
+        act_Rh_norm_cache.data());
 
     layer_norm_lstm::BackwardPass<T> lstm(
         batch_size,
@@ -366,6 +390,8 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
         act_Wx.data(),
         layer_norm1,
         act_Wx_norm.data(),
+        act_Rh.data(),
+        layer_norm2,
         has_zoneout ? zoneout_mask.flat<T>().data() : nullptr);
   }
 };

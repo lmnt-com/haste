@@ -151,15 +151,15 @@ class LayerNormLSTMLayer(tf.Module):
         self._kernel = v1.get_variable('kernel', initializer=weights)
         self.kernel, self.recurrent_kernel = tf.split(self._kernel, [input_size, num_units], axis=0)
         self.bias = v1.get_variable('bias', initializer=biases)
-        self.alpha = v1.get_variable('alpha', shape=[self.num_units * 4], initializer=v1.initializers.ones())
-        self.beta = v1.get_variable('beta', shape=[self.num_units * 4], initializer=v1.initializers.zeros())
+        self.alpha = v1.get_variable('alpha', shape=[2, self.num_units * 4], initializer=v1.initializers.ones())
+        self.beta = v1.get_variable('beta', shape=[2, self.num_units * 4], initializer=v1.initializers.zeros())
         self.built = True
         return
 
     # Use the same format as CudnnLSTM.
     with self.name_scope, v1.variable_scope(self.realname, 'lstm_cell'):
-      self.alpha = v1.get_variable('alpha', shape=[self.num_units * 4], initializer=v1.initializers.ones())
-      self.beta = v1.get_variable('beta', shape=[self.num_units * 4], initializer=v1.initializers.zeros())
+      self.alpha = v1.get_variable('alpha', shape=[2, self.num_units * 4], initializer=v1.initializers.ones())
+      self.beta = v1.get_variable('beta', shape=[2, self.num_units * 4], initializer=v1.initializers.zeros())
       with v1.variable_scope('cudnn_lstm'):
         # Sigh, cuDNN uses two bias vectors instead of just one.
         extra_biases = [self.bias_initializer(tf.TensorShape([num_units]), dtype=self.dtype) for _ in range(4)]

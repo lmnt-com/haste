@@ -42,12 +42,19 @@ class ForwardPass {
     // y: [N,H]
     void Run(const cudaStream_t& stream, const T* x, T* y);
 
+    void RunPartial(
+        const cudaStream_t& stream,
+        const int minibatch,
+        const T* x,
+        T* y);
+
   private:
     const int batch_size_;
     const int hidden_size_;
     const T* alpha_;
     const T* beta_;
     T* cache_;
+    int partial_;
 };
 
 template<typename T>
@@ -65,6 +72,12 @@ class BackwardPass {
 
     void Run(const cudaStream_t& stream, const T* dy, T* dx);
 
+    void RunPartial(
+        const cudaStream_t& stream,
+        const int minibatch,
+        const T* dy,
+        T* dx);
+
   private:
     const int batch_size_;
     const int hidden_size_;
@@ -74,6 +87,7 @@ class BackwardPass {
     T* dalpha_;
     T* dbeta_;
     T* cache_;
+    int partial_;
 };
 
 }  // namespace layer_norm
