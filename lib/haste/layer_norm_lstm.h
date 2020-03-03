@@ -84,6 +84,8 @@ class ForwardPass {
         T* act_Wx_norm,
         T* act_Rh,
         layer_norm::ForwardPass<T>& layer_norm2,
+        layer_norm::ForwardPass<T>& layer_norm3,
+        T* act_c_norm,
         const float zoneout_prob,
         const T* zoneout_mask);
 
@@ -99,6 +101,8 @@ class ForwardPass {
         T* tmp_Rh,
         T* act_Rh,
         layer_norm::ForwardPass<T>& layer_norm2,
+        layer_norm::ForwardPass<T>& layer_norm3,
+        T* act_c_norm,
         const float zoneout_prob,
         const T* zoneout_mask);
 
@@ -171,6 +175,8 @@ class BackwardPass {
         T* act_Wx_norm,
         T* act_Rh,
         layer_norm::BackwardPass<T>& layer_norm2,
+        layer_norm::BackwardPass<T>& layer_norm3,
+        T* act_c_norm,
         const T* zoneout_mask);
 
   private:
@@ -186,6 +192,8 @@ class BackwardPass {
         T* v,
         T* act_Rh,
         layer_norm::BackwardPass<T>& layer_norm2,
+        layer_norm::BackwardPass<T>& layer_norm3,
+        T* act_c_norm,
         const T* zoneout_mask);
     struct private_data;
     private_data* data_;

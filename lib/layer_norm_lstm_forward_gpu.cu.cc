@@ -22,45 +22,40 @@
 
 namespace {
 
-// `h` and `h_out` may be aliased.
 // `c` and `c_out` may be aliased.
-template<typename T, bool Training, bool ApplyZoneout>
+template<typename T, bool Training>
 __global__
-void PointwiseOperations(const int batch_dim,
-                         const int hidden_dim,
-                         const T* Wx,  // Precomputed (Wx) vector
-                         const T* Rh,  // Precomputed (Rh) vector
-                         const T* b,   // Bias for gates
-                         const T* h,   // Input recurrent state
-                         const T* c,   // Input cell state
-                         T* h_out,     // Output recurrent state
-                         T* c_out,     // Output cell state
-                         T* v_out,     // Output vector v (Wx + Rh + b) (only used if Training==true)
-                         const float zoneout_prob,
-                         const T* zoneout_mask) {  // Zoneout mask (only used if ApplyZoneout==true)
-  // We're in column-major order here, so increase x => increase row.
+void ComputeCellState(
+    const int batch_size,
+    const int hidden_size,
+    const T* Wx,  // Precomputed (Wx) vector
+    const T* Rh,  // Precomputed (Rh) vector
+    const T* b,   // Bias for gates
+    const T* c,   // Input cell state
+    T* c_out,     // Output cell state
+    T* v_out) {   // Output vector v (Wx + Rh + b)
   const int row = blockDim.x * blockIdx.x + threadIdx.x;
   const int col = blockDim.y * blockIdx.y + threadIdx.y;
 
-  if (row >= hidden_dim || col >= batch_dim)
+  if (row >= hidden_size || col >= batch_size)
     return;
 
   // Base index into the Wx and Rh matrices.
-  const int weight_idx = col * (hidden_dim * 4) + row;
+  const int weight_idx = col * (hidden_size * 4) + row;
 
   // Base index into the output matrix. This is different from `weight_idx` because
   // the number of rows are different between the two sets of matrices.
-  const int output_idx = col * hidden_dim + row;
+  const int output_idx = col * hidden_size + row;
 
-  const int i_idx = weight_idx + 0 * hidden_dim;
-  const int g_idx = weight_idx + 1 * hidden_dim;
-  const int f_idx = weight_idx + 2 * hidden_dim;
-  const int o_idx = weight_idx + 3 * hidden_dim;
+  const int i_idx = weight_idx + 0 * hidden_size;
+  const int g_idx = weight_idx + 1 * hidden_size;
+  const int f_idx = weight_idx + 2 * hidden_size;
+  const int o_idx = weight_idx + 3 * hidden_size;
 
-  const T i = sigmoid(Wx[i_idx] + Rh[i_idx] + b[row + 0 * hidden_dim]);
-  const T g = tanh   (Wx[g_idx] + Rh[g_idx] + b[row + 1 * hidden_dim]);
-  const T f = sigmoid(Wx[f_idx] + Rh[f_idx] + b[row + 2 * hidden_dim]);
-  const T o = sigmoid(Wx[o_idx] + Rh[o_idx] + b[row + 3 * hidden_dim]);
+  const T i = sigmoid(Wx[i_idx] + Rh[i_idx] + b[row + 0 * hidden_size]);
+  const T g = tanh   (Wx[g_idx] + Rh[g_idx] + b[row + 1 * hidden_size]);
+  const T f = sigmoid(Wx[f_idx] + Rh[f_idx] + b[row + 2 * hidden_size]);
+  const T o = sigmoid(Wx[o_idx] + Rh[o_idx] + b[row + 3 * hidden_size]);
 
   // Compile-time constant branch should be eliminated by compiler so we have
   // straight-through code.
@@ -69,9 +64,37 @@ void PointwiseOperations(const int batch_dim,
     v_out[g_idx] = g;
     v_out[f_idx] = f;
     v_out[o_idx] = o;
+  } else {
+    v_out[o_idx] = o;
   }
 
-  T cur_c_value = (f * c[output_idx]) + (i * g);
+  c_out[output_idx] = (f * c[output_idx]) + (i * g);
+}
+
+// `h` and `h_out` may be aliased.
+template<typename T, bool Training, bool ApplyZoneout>
+__global__
+void ComputeCellOutput(
+    const int batch_size,
+    const int hidden_size,
+    const T* h,   // Input recurrent state
+    const T* c,   // Input cell state
+    const T* v,
+    T* h_out,     // Output recurrent state
+    const float zoneout_prob,
+    const T* zoneout_mask) {  // Zoneout mask (only used if ApplyZoneout==true)
+  const int row = blockDim.x * blockIdx.x + threadIdx.x;
+  const int col = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (row >= hidden_size || col >= batch_size)
+    return;
+
+  const int weight_idx = col * (hidden_size * 4) + row;
+  const int output_idx = col * hidden_size + row;
+
+  const T o = v[weight_idx + 3 * hidden_size];
+  const T cur_c_value = c[output_idx];
+
   T cur_h_value = o * tanh(cur_c_value);
 
   if (ApplyZoneout) {
@@ -82,7 +105,6 @@ void PointwiseOperations(const int batch_dim,
     }
   }
 
-  c_out[output_idx] = cur_c_value;
   h_out[output_idx] = cur_h_value;
 }
 
@@ -148,6 +170,8 @@ void ForwardPass<T>::IterateInternal(
     T* tmp_Rh,   // Temporary storage for Rh vector [N,H*4]
     T* act_Rh,
     layer_norm::ForwardPass<T>& layer_norm2,
+    layer_norm::ForwardPass<T>& layer_norm3,
+    T* act_c_norm,
     const float zoneout_prob,
     const T* zoneout_mask) { // Zoneout mask [N,H]
   static const T alpha = static_cast<T>(1.0);
@@ -179,62 +203,66 @@ void ForwardPass<T>::IterateInternal(
       (batch_size + blockDim.y - 1) / blockDim.y);
 
   if (training) {
+    ComputeCellState<T, true><<<gridDim, blockDim, 0, stream1>>>(
+        batch_size,
+        hidden_size,
+        v,
+        tmp_Rh,
+        b,
+        c,
+        c_out,
+        v);
+    layer_norm3.RunPartial(stream1, batch_size, c_out, act_c_norm);
     if (zoneout_prob && zoneout_mask) {
-      PointwiseOperations<T, true, true><<<gridDim, blockDim, 0, stream1>>>(
+      ComputeCellOutput<T, true, true><<<gridDim, blockDim, 0, stream1>>>(
           batch_size,
           hidden_size,
-          v,
-          tmp_Rh,
-          b,
           h,
-          c,
-          h_out,
-          c_out,
+          act_c_norm,
           v,
+          h_out,
           zoneout_prob,
           zoneout_mask);
     } else {
-      PointwiseOperations<T, true, false><<<gridDim, blockDim, 0, stream1>>>(
+      ComputeCellOutput<T, true, false><<<gridDim, blockDim, 0, stream1>>>(
           batch_size,
           hidden_size,
-          v,
-          tmp_Rh,
-          b,
           h,
-          c,
-          h_out,
-          c_out,
+          act_c_norm,
           v,
+          h_out,
           0.0f,
           nullptr);
     }
   } else {
+    ComputeCellState<T, false><<<gridDim, blockDim, 0, stream1>>>(
+        batch_size,
+        hidden_size,
+        v,
+        tmp_Rh,
+        b,
+        c,
+        c_out,
+        v);
+    layer_norm3.RunPartial(stream1, batch_size, c_out, act_c_norm);
     if (zoneout_prob && zoneout_mask) {
-      PointwiseOperations<T, false, true><<<gridDim, blockDim, 0, stream1>>>(
+      ComputeCellOutput<T, false, true><<<gridDim, blockDim, 0, stream1>>>(
           batch_size,
           hidden_size,
-          v,
-          tmp_Rh,
-          b,
           h,
-          c,
+          act_c_norm,
+          v,
           h_out,
-          c_out,
-          nullptr,
           zoneout_prob,
           zoneout_mask);
     } else {
-      PointwiseOperations<T, false, false><<<gridDim, blockDim, 0, stream1>>>(
+      ComputeCellOutput<T, false, false><<<gridDim, blockDim, 0, stream1>>>(
           batch_size,
           hidden_size,
-          v,
-          tmp_Rh,
-          b,
           h,
-          c,
+          act_c_norm,
+          v,
           h_out,
-          c_out,
-          nullptr,
           0.0f,
           nullptr);
     }
@@ -256,6 +284,8 @@ void ForwardPass<T>::Run(
     T* act_Wx_norm,
     T* act_Rh,
     layer_norm::ForwardPass<T>& layer_norm2,
+    layer_norm::ForwardPass<T>& layer_norm3,
+    T* act_c_norm,
     const float zoneout_prob,
     const T* zoneout_mask) { // Zoneout mask [T,N,H]
   static const T alpha = static_cast<T>(1.0);
@@ -294,6 +324,8 @@ void ForwardPass<T>::Run(
         tmp_Rh,
         act_Rh + i * NH * 4,
         layer_norm2,
+        layer_norm3,
+        act_c_norm + i * NH,
         zoneout_prob,
         zoneout_mask ? zoneout_mask + i * NH : nullptr);
   }

@@ -45,6 +45,8 @@ REGISTER_OP("HasteLayerNormLstm")
     .Input("bias: R")                   // [H*4]
     .Input("alpha: R")
     .Input("beta: R")
+    .Input("alpha_h: R")
+    .Input("beta_h: R")
     .Input("zoneout_mask: R")           // [T,N,H]
     .Output("h: R")                     // [T,N,H]
     .Output("c: R")                     // [T,N,H]
@@ -56,6 +58,8 @@ REGISTER_OP("HasteLayerNormLstm")
       ShapeHandle bias_shape;
       ShapeHandle alpha_shape;
       ShapeHandle beta_shape;
+      ShapeHandle alpha_h_shape;
+      ShapeHandle beta_h_shape;
       ShapeHandle zoneout_mask_shape;
 
       TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 3, &input_shape));
@@ -64,7 +68,9 @@ REGISTER_OP("HasteLayerNormLstm")
       TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 1, &bias_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 2, &alpha_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(5), 2, &beta_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(6), 3, &zoneout_mask_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(6), 1, &alpha_h_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(7), 1, &beta_h_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(8), 3, &zoneout_mask_shape));
 
       const DimensionHandle time_steps = c->Dim(input_shape, 0);
       const DimensionHandle batch_size = c->Dim(input_shape, 1);
@@ -96,7 +102,9 @@ struct HasteLayerNormLstmOp : public OpKernel {
     const Tensor& bias = context->input(3);
     const Tensor& alpha = context->input(4);
     const Tensor& beta = context->input(5);
-    const Tensor& zoneout_mask = context->input(6);
+    const Tensor& alpha_h = context->input(6);
+    const Tensor& beta_h = context->input(7);
+    const Tensor& zoneout_mask = context->input(8);
 
     const auto time_steps = input.shape().dim_size(0);
     const auto batch_size = input.shape().dim_size(1);
@@ -124,7 +132,9 @@ struct HasteLayerNormLstmOp : public OpKernel {
       { "act_Wx_norm", activations_shape },
       { "act_Wx_norm_cache", norm_cache_shape },
       { "act_Rh", activations_shape },
-      { "act_Rh_norm_cache", norm_cache_shape }
+      { "act_Rh_norm_cache", norm_cache_shape },
+      { "act_c_norm", { time_steps, batch_size, hidden_size } },
+      { "act_c_norm_cache", norm_cache_shape },
     };
 
     Tensor* output_cache = nullptr;
@@ -136,6 +146,8 @@ struct HasteLayerNormLstmOp : public OpKernel {
     TensorView<T> act_Wx_norm_cache = memory["act_Wx_norm_cache"];
     TensorView<T> act_Rh = memory["act_Rh"];
     TensorView<T> act_Rh_norm_cache = memory["act_Rh_norm_cache"];
+    TensorView<T> act_c_norm = memory["act_c_norm"];
+    TensorView<T> act_c_norm_cache = memory["act_c_norm_cache"];
 
     Tensor tmp_Rh;
     const TensorShape tmp_Rh_shape = { batch_size, 4 * hidden_size };
@@ -158,6 +170,13 @@ struct HasteLayerNormLstmOp : public OpKernel {
         beta.SubSlice(1).unaligned_flat<T>().data(),
         act_Rh_norm_cache.data());
 
+    layer_norm::ForwardPass<T> layer_norm3(
+        time_steps * batch_size,
+        hidden_size,
+        alpha_h.flat<T>().data(),
+        beta_h.flat<T>().data(),
+        act_c_norm_cache.data());
+
     layer_norm_lstm::ForwardPass<T> lstm(
         training_,
         batch_size,
@@ -179,6 +198,8 @@ struct HasteLayerNormLstmOp : public OpKernel {
         act_Wx_norm.data(),
         act_Rh.data(),
         layer_norm2,
+        layer_norm3,
+        act_c_norm.data(),
         has_zoneout ? zoneout_prob_ : 0.0f,
         has_zoneout ? zoneout_mask.flat<T>().data() : nullptr);
   }
@@ -199,6 +220,8 @@ REGISTER_OP("HasteLayerNormLstmGrad")
     .Input("bias: R")                  // [H*4]
     .Input("alpha: R")
     .Input("beta: R")
+    .Input("alpha_h: R")
+    .Input("beta_h: R")
     .Input("h: R")                     // [T,N,H]
     .Input("c: R")                     // [T,N,H]
     .Input("cache: R")
@@ -211,6 +234,8 @@ REGISTER_OP("HasteLayerNormLstmGrad")
     .Output("db: R")                   // [H*4]
     .Output("dalpha: R")
     .Output("dbeta: R")
+    .Output("dalpha_h: R")
+    .Output("dbeta_h: R")
     .SetShapeFn([](InferenceContext* c) {
       ShapeHandle x_shape;
       ShapeHandle kernel_shape;
@@ -218,6 +243,8 @@ REGISTER_OP("HasteLayerNormLstmGrad")
       ShapeHandle bias_shape;
       ShapeHandle alpha_shape;
       ShapeHandle beta_shape;
+      ShapeHandle alpha_h_shape;
+      ShapeHandle beta_h_shape;
       ShapeHandle h_shape;
       ShapeHandle c_shape;
       ShapeHandle cache_shape;
@@ -231,12 +258,14 @@ REGISTER_OP("HasteLayerNormLstmGrad")
       TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 1, &bias_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 2, &alpha_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(5), 2, &beta_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(6), 3, &h_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(7), 3, &c_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(8), 1, &cache_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(9), 3, &dh_new_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(10), 3, &dc_new_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(11), 3, &zoneout_mask_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(6), 1, &alpha_h_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(7), 1, &beta_h_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(8), 3, &h_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(9), 3, &c_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(10), 1, &cache_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(11), 3, &dh_new_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(12), 3, &dc_new_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(13), 3, &zoneout_mask_shape));
 
       DimensionHandle input_size = c->Dim(x_shape, 0);
       DimensionHandle time_steps = c->Dim(x_shape, 1);
@@ -252,6 +281,8 @@ REGISTER_OP("HasteLayerNormLstmGrad")
       c->set_output(3, bias_shape);
       c->set_output(4, alpha_shape);
       c->set_output(5, beta_shape);
+      c->set_output(6, alpha_h_shape);
+      c->set_output(7, beta_h_shape);
       return Status::OK();
     });
 
@@ -266,12 +297,14 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
     const Tensor& bias = context->input(3);
     const Tensor& alpha = context->input(4);
     const Tensor& beta = context->input(5);
-    const Tensor& h_vector = context->input(6);
-    const Tensor& c_vector = context->input(7);
-    const Tensor& cache_input = context->input(8);
-    const Tensor& dh_new = context->input(9);
-    const Tensor& dc_new = context->input(10);
-    const Tensor& zoneout_mask = context->input(11);
+    const Tensor& alpha_h = context->input(6);
+    const Tensor& beta_h = context->input(7);
+    const Tensor& h_vector = context->input(8);
+    const Tensor& c_vector = context->input(9);
+    const Tensor& cache_input = context->input(10);
+    const Tensor& dh_new = context->input(11);
+    const Tensor& dc_new = context->input(12);
+    const Tensor& zoneout_mask = context->input(13);
 
     const auto input_size = input.shape().dim_size(0);
     const auto time_steps = input.shape().dim_size(1);
@@ -309,6 +342,14 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
     OP_REQUIRES_OK(context, context->allocate_output(5, beta.shape(), &dbeta));
 
     // Needs to be initialized to 0.
+    Tensor* dalpha_h = nullptr;
+    OP_REQUIRES_OK(context, context->allocate_output(6, alpha_h.shape(), &dalpha_h));
+
+    // Needs to be initialized to 0.
+    Tensor* dbeta_h = nullptr;
+    OP_REQUIRES_OK(context, context->allocate_output(7, beta_h.shape(), &dbeta_h));
+
+    // Needs to be initialized to 0.
     const TensorShape dh_shape = { batch_size, hidden_size };
     Tensor dh;
     OP_REQUIRES_OK(context, context->allocate_temp(data_type, dh_shape, &dh));
@@ -325,7 +366,9 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
       { "act_Wx_norm", activations_shape },
       { "act_Wx_norm_cache", norm_cache_shape },
       { "act_Rh", activations_shape },
-      { "act_Rh_norm_cache", norm_cache_shape }
+      { "act_Rh_norm_cache", norm_cache_shape },
+      { "act_c_norm", { time_steps, batch_size, hidden_size } },
+      { "act_c_norm_cache", norm_cache_shape },
     };
 
     assert(cache_input.shape().num_elements() == memory_layout.NumElements());
@@ -336,12 +379,16 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
     TensorView<T> act_Wx_norm_cache = memory["act_Wx_norm_cache"];
     TensorView<T> act_Rh = memory["act_Rh"];
     TensorView<T> act_Rh_norm_cache = memory["act_Rh_norm_cache"];
+    TensorView<T> act_c_norm = memory["act_c_norm"];
+    TensorView<T> act_c_norm_cache = memory["act_c_norm_cache"];
 
     cudaMemset(dW->flat<T>().data(), 0, dW->AllocatedBytes());
     cudaMemset(dR->flat<T>().data(), 0, dR->AllocatedBytes());
     cudaMemset(db->flat<T>().data(), 0, db->AllocatedBytes());
     cudaMemset(dalpha->flat<T>().data(), 0, dalpha->AllocatedBytes());
     cudaMemset(dbeta->flat<T>().data(), 0, dbeta->AllocatedBytes());
+    cudaMemset(dalpha_h->flat<T>().data(), 0, dalpha_h->AllocatedBytes());
+    cudaMemset(dbeta_h->flat<T>().data(), 0, dbeta_h->AllocatedBytes());
     cudaMemset(dh.flat<T>().data(), 0, dh.AllocatedBytes());
     cudaMemset(dc.flat<T>().data(), 0, dc.AllocatedBytes());
 
@@ -364,6 +411,16 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
         dalpha->SubSlice(1).unaligned_flat<T>().data(),
         dbeta->SubSlice(1).unaligned_flat<T>().data(),
         act_Rh_norm_cache.data());
+
+    layer_norm::BackwardPass<T> layer_norm3(
+        time_steps * batch_size,
+        hidden_size,
+        alpha_h.flat<T>().data(),
+        beta_h.flat<T>().data(),
+        c_vector.SubSlice(1).unaligned_flat<T>().data(),
+        dalpha_h->flat<T>().data(),
+        dbeta_h->flat<T>().data(),
+        act_c_norm_cache.data());
 
     layer_norm_lstm::BackwardPass<T> lstm(
         batch_size,
@@ -392,6 +449,8 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
         act_Wx_norm.data(),
         act_Rh.data(),
         layer_norm2,
+        layer_norm3,
+        act_c_norm.data(),
         has_zoneout ? zoneout_mask.flat<T>().data() : nullptr);
   }
 };

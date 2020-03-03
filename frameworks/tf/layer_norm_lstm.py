@@ -63,7 +63,9 @@ def lstm_gradient(op, *grads):
   b = op.inputs[3]
   alpha = op.inputs[4]
   beta = op.inputs[5]
-  zoneout_mask = op.inputs[6]
+  alpha_h = op.inputs[6]
+  beta_h = op.inputs[7]
+  zoneout_mask = op.inputs[8]
   h = op.outputs[0]
   c = op.outputs[1]
   cache = op.outputs[2]
@@ -73,20 +75,22 @@ def lstm_gradient(op, *grads):
   W = tf.transpose(W, [1, 0])
   R = tf.transpose(R, [1, 0])
 
-  dx, dW, dR, db, dalpha, dbeta = LIB.haste_layer_norm_lstm_grad(
+  dx, dW, dR, db, dalpha, dbeta, dalpha_h, dbeta_h = LIB.haste_layer_norm_lstm_grad(
       x,
       W,
       R,
       b,
       alpha,
       beta,
+      alpha_h,
+      beta_h,
       h,
       c,
       cache,
       grads[0],
       grads[1],
       zoneout_mask)
-  return [dx, dW, dR, db, dalpha, dbeta, None]
+  return [dx, dW, dR, db, dalpha, dbeta, dalpha_h, dbeta_h, None]
 
 
 class LayerNormLSTMLayer(tf.Module):
@@ -99,8 +103,7 @@ class LayerNormLSTMLayer(tf.Module):
         dropout=0.0,
         zoneout=0.0,
         dtype=None,
-        name=None,
-        cudnn_compat=False):
+        name=None):
     super(LayerNormLSTMLayer, self).__init__(name)
     self.realname = name
     self.num_units = num_units
@@ -113,12 +116,13 @@ class LayerNormLSTMLayer(tf.Module):
     self.dropout = dropout
     self.zoneout = zoneout
     self.dtype = dtype or tf.float32
-    self.cudnn_compat = cudnn_compat
     self.kernel = None
     self.recurrent_kernel = None
     self.bias = None
     self.alpha = None
     self.beta = None
+    self.alpha_h = None
+    self.beta_h = None
     self.built = False
 
   def build(self, shape):
@@ -145,54 +149,15 @@ class LayerNormLSTMLayer(tf.Module):
     biases = tf.concat(biases, axis=-1)
 
     # Use the same format as LSTMBlockCell.
-    if not self.cudnn_compat:
-      with self.name_scope, v1.variable_scope(self.realname, 'lstm_cell'):
-        weights = tf.concat([kernel_weights, recurrent_weights], axis=0)
-        self._kernel = v1.get_variable('kernel', initializer=weights)
-        self.kernel, self.recurrent_kernel = tf.split(self._kernel, [input_size, num_units], axis=0)
-        self.bias = v1.get_variable('bias', initializer=biases)
-        self.alpha = v1.get_variable('alpha', shape=[2, self.num_units * 4], initializer=v1.initializers.ones())
-        self.beta = v1.get_variable('beta', shape=[2, self.num_units * 4], initializer=v1.initializers.zeros())
-        self.built = True
-        return
-
-    # Use the same format as CudnnLSTM.
     with self.name_scope, v1.variable_scope(self.realname, 'lstm_cell'):
+      weights = tf.concat([kernel_weights, recurrent_weights], axis=0)
+      self._kernel = v1.get_variable('kernel', initializer=weights)
+      self.kernel, self.recurrent_kernel = tf.split(self._kernel, [input_size, num_units], axis=0)
+      self.bias = v1.get_variable('bias', initializer=biases)
       self.alpha = v1.get_variable('alpha', shape=[2, self.num_units * 4], initializer=v1.initializers.ones())
       self.beta = v1.get_variable('beta', shape=[2, self.num_units * 4], initializer=v1.initializers.zeros())
-      with v1.variable_scope('cudnn_lstm'):
-        # Sigh, cuDNN uses two bias vectors instead of just one.
-        extra_biases = [self.bias_initializer(tf.TensorShape([num_units]), dtype=self.dtype) for _ in range(4)]
-        extra_biases = tf.concat(extra_biases, axis=-1)
-        kernel_weights = tf.reshape(kernel_weights, [-1])
-        recurrent_weights = tf.reshape(recurrent_weights, [-1])
-        opaque_initial_value = tf.concat([kernel_weights, recurrent_weights, biases, extra_biases], axis=-1)
-        self.opaque = v1.get_variable('opaque_kernel', initializer=opaque_initial_value)
-
-    # Split into 3 variables.
-    W_size = 4 * input_size * num_units
-    R_size = 4 * num_units * num_units
-    b_size = 8 * num_units
-    kernel, recurrent_kernel, bias = tf.split(opaque, [W_size, R_size, b_size])
-
-    # Convert from cuDNN [i, f, g, o] format to TF and LMNT [i, g, f, o] format.
-    # Note that we only use a single bias vector so we sum the two separate ones
-    # and then reorder formats.
-    Wi, Wf, Wg, Wo = tf.split(kernel, 4)
-    Ri, Rf, Rg, Ro = tf.split(recurrent_kernel, 4)
-    bi, bf, bg, bo = tf.split(tf.reduce_sum(tf.split(bias, 2), axis=0), 4)
-    kernel = tf.concat([Wi, Wg, Wf, Wo], axis=0)
-    recurrent_kernel = tf.concat([Ri, Rg, Rf, Ro], axis=0)
-    bias = tf.concat([bi, bg, bf, bo], axis=0)
-
-    # Shape them correctly.
-    self.kernel = tf.reshape(kernel, [4 * num_units, input_size])
-    self.recurrent_kernel = tf.reshape(recurrent_kernel, [4 * num_units, num_units])
-    self.bias = tf.reshape(bias, [4 * num_units])
-
-    # Pre-transpose the kernels.
-    self.kernel = tf.transpose(self.kernel, [1, 0])
-    self.recurrent_kernel = tf.transpose(self.recurrent_kernel, [1, 0])
+      self.alpha_h = v1.get_variable('alpha_h', shape=[self.num_units], initializer=v1.initializers.ones())
+      self.beta_h = v1.get_variable('beta_h', shape=[self.num_units], initializer=v1.initializers.zeros())
     self.built = True
 
   @property
@@ -227,6 +192,8 @@ class LayerNormLSTMLayer(tf.Module):
         self.bias,
         self.alpha,
         self.beta,
+        self.alpha_h,
+        self.beta_h,
         zoneout_mask,
         training=training,
         zoneout_prob=self.zoneout)
@@ -244,16 +211,6 @@ class LayerNormLSTMLayer(tf.Module):
 class LayerNormLSTM(tf.Module):
   """
   Layer Normalized Long Short-Term Memory layer.
-
-  This LSTM layer offers a fused, GPU-accelerated TensorFlow op for inference
-  and training. Its weights and variables are compatible with `BasicLSTMCell`,
-  `LSTMCell`, and `LSTMBlockCell` by default, and is able to load weights
-  from `tf.contrib.cudnn_rnn.CudnnLSTM` when `cudnn_compat=True` is specified.
-
-  Although this implementation is comparable in performance to cuDNN's LSTM,
-  it offers additional options not typically found in other high-performance
-  implementations. DropConnect and Zoneout regularization are built-in, and
-  this layer allows setting a non-zero initial forget gate bias.
   """
 
   def __init__(self, num_units, direction='unidirectional', **kwargs):
@@ -282,11 +239,6 @@ class LayerNormLSTM(tf.Module):
         regularization. Defaults to 0.
       dtype: (optional) the data type for this layer. Defaults to `tf.float32`.
       name: (optional) string, the name for this layer.
-      cudnn_compat: (optional) bool, if `True`, the variables created by this
-        layer are compatible with `tf.contrib.cudnn_rnn.CudnnLSTM`. Note that
-        this should only be set if you're restoring variables from a cuDNN
-        model. It's currently not possible to train a model with
-        `cudnn_compat=True` and restore it with CudnnLSTM. Defaults to `False`.
     """
     assert direction in ['unidirectional', 'bidirectional']
 

@@ -26,18 +26,55 @@ namespace {
 
 template<typename T, bool ApplyZoneout>
 __global__
+void ComputeOutputGrad(
+    const int batch_size,
+    const int hidden_size,
+    const T* act_c_norm,
+    const T* dh_new,
+    T* dh_inout,
+    T* dlayer_norm,
+    T* v,
+    const T* zoneout_mask) {
+  const int row = blockDim.x * blockIdx.x + threadIdx.x;
+  const int col = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (row >= hidden_size || col >= batch_size)
+    return;
+
+  const int base_idx = col * hidden_size + row;
+  const int stride4_base_idx = col * (hidden_size * 4) + row;
+  const int o_idx = stride4_base_idx + 3 * hidden_size;
+
+  T dh_total = dh_new[base_idx] + dh_inout[base_idx];
+  if (ApplyZoneout) {
+    const T mask = zoneout_mask[base_idx];
+    dh_inout[base_idx] = (static_cast<T>(1.0) - mask) * dh_total;
+    dh_total = mask * dh_total;
+  } else {
+    dh_inout[base_idx] = static_cast<T>(0.0);
+  }
+
+  const T c_tanh = tanh(act_c_norm[base_idx]);
+  const T o = v[o_idx];
+
+  const T do_ = c_tanh * dh_total;
+  const T dc_tanh = o * dh_total;
+
+  dlayer_norm[base_idx] = d_tanh(c_tanh) * dc_tanh;
+  v[o_idx] = d_sigmoid(o) * do_;
+}
+
+template<typename T>
+__global__
 void PointwiseOperations(const int batch_dim,
                          const int hidden_dim,
                          const T* c,
                          const T* v,
-                         const T* c_new,
-                         const T* dh_new,
                          const T* dc_new,
+                         const T* dlayer_norm,
                          T* db_out,
-                         T* dh_inout,
                          T* dc_inout,
-                         T* dv_out,
-                         const T* zoneout_mask) {  // Zoneout mask (only used if ApplyZoneout==true)
+                         T* dv_out) {
   const int row = blockDim.x * blockIdx.x + threadIdx.x;
   const int col = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -45,11 +82,6 @@ void PointwiseOperations(const int batch_dim,
     return;
 
   const int base_idx = col * hidden_dim + row;
-
-        T dc_total = dc_new[base_idx] + dc_inout[base_idx];
-        T dh_total = dh_new[base_idx] + dh_inout[base_idx];
-  const T c_tanh = tanh(c_new[base_idx]);
-
   const int stride4_base_idx = col * (hidden_dim * 4) + row;
   const int i_idx = stride4_base_idx + 0 * hidden_dim;
   const int g_idx = stride4_base_idx + 1 * hidden_dim;
@@ -61,23 +93,13 @@ void PointwiseOperations(const int batch_dim,
   const T f = v[f_idx];
   const T o = v[o_idx];
 
-  if (ApplyZoneout) {
-    const T mask = zoneout_mask[base_idx];
-    dh_inout[base_idx] = (static_cast<T>(1.0) - mask) * dh_total;
-    dh_total = mask * dh_total;
-  } else {
-    dh_inout[base_idx] = static_cast<T>(0.0);
-  }
-
-  const T do_ = c_tanh * dh_total;
-  const T dc_tanh = o * dh_total;
-          dc_total += d_tanh(c_tanh) * dc_tanh;
+  const T dc_total = dc_new[base_idx] + dc_inout[base_idx] + dlayer_norm[base_idx];
   const T df = c[base_idx] * dc_total;
   const T dc = f * dc_total;
   const T di = g * dc_total;
   const T dg = i * dc_total;
   const T dv_g = d_tanh(g) * dg;
-  const T dv_o = d_sigmoid(o) * do_;
+  const T dv_o = o;
   const T dv_i = d_sigmoid(i) * di;
   const T dv_f = d_sigmoid(f) * df;
 
@@ -152,6 +174,8 @@ void BackwardPass<T>::IterateInternal(
     T* v,             // [N,H*4]
     T* act_Rh,
     layer_norm::BackwardPass<T>& layer_norm2,
+    layer_norm::BackwardPass<T>& layer_norm3,
+    T* act_c_norm,
     const T* zoneout_mask) {
   const T alpha = static_cast<T>(1.0);
   const T beta_sum = static_cast<T>(1.0);  // Accumulate into output matrix!
@@ -169,36 +193,37 @@ void BackwardPass<T>::IterateInternal(
       (batch_size + blockDim.y - 1) / blockDim.y);
 
   if (zoneout_mask) {
-    PointwiseOperations<T, true><<<gridDim, blockDim, 0, stream1>>>(
+    ComputeOutputGrad<T, true><<<gridDim, blockDim, 0, stream1>>>(
         batch_size,
         hidden_size,
-        c,
-        v,
-        c_new,
+        act_c_norm,
         dh_new,
-        dc_new,
-        db,
         dh,
-        dc,
+        act_c_norm,
         v,
-        zoneout_mask
-    );
+        zoneout_mask);
   } else {
-    PointwiseOperations<T, false><<<gridDim, blockDim, 0, stream1>>>(
+    ComputeOutputGrad<T, false><<<gridDim, blockDim, 0, stream1>>>(
         batch_size,
         hidden_size,
-        c,
-        v,
-        c_new,
+        act_c_norm,
         dh_new,
-        dc_new,
-        db,
         dh,
-        dc,
+        act_c_norm,
         v,
-        nullptr
-    );
+        nullptr);
   }
+  layer_norm3.RunPartial(stream1, batch_size, act_c_norm, act_c_norm);
+  PointwiseOperations<T><<<gridDim, blockDim, 0, stream1>>>(
+      batch_size,
+      hidden_size,
+      c,
+      v,
+      dc_new,
+      act_c_norm,
+      db,
+      dc,
+      v);
 
   // Signal completion of pointwise operations for data-dependent streams.
   cudaEventRecord(event, stream1);
@@ -237,6 +262,8 @@ void BackwardPass<T>::Run(
     T* act_Wx_norm,   // [T,N,H*4]
     T* act_Rh,
     layer_norm::BackwardPass<T>& layer_norm2,
+    layer_norm::BackwardPass<T>& layer_norm3,
+    T* act_c_norm,
     const T* zoneout_mask) {
   const T alpha = static_cast<T>(1.0);
   const T beta_sum = static_cast<T>(1.0);  // Accumulate into output matrix!
@@ -268,6 +295,8 @@ void BackwardPass<T>::Run(
         act_Wx_norm + i * NH * 4,
         act_Rh + i * NH * 4,
         layer_norm2,
+        layer_norm3,
+        act_c_norm + i * NH,
         zoneout_mask ? zoneout_mask + i * NH : nullptr);
   }
   cudaEventRecord(event, stream1);
