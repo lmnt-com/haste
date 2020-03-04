@@ -19,16 +19,15 @@
 
 namespace {
 
-template<typename T>
+template<typename T, bool ApplyBeta>
 __global__
 void LayerNormGrad(
     const int batch_size,
     const int hidden_size,
-    const T* alpha,
-    const T* beta,
+    const T* gamma,
     const T* x,
     const T* dy,
-    T* dalpha,
+    T* dgamma,
     T* dbeta,
     T* dx,
     T* cache) {
@@ -54,10 +53,11 @@ void LayerNormGrad(
     const T centered_x = x[batch_idx + i] - mean;
     const T z = centered_x * invstd;
 
-    atomicAdd(&dalpha[i], z * cur_dy);
-    atomicAdd(&dbeta[i], cur_dy);
+    atomicAdd(&dgamma[i], z * cur_dy);
+    if (ApplyBeta)
+      atomicAdd(&dbeta[i], cur_dy);
 
-    const T db = alpha[i] * cur_dy;
+    const T db = gamma[i] * cur_dy;
     dsigma_tmp += centered_x * db;
     dmu1_tmp += centered_x;
     dmu2_tmp += db;
@@ -84,7 +84,7 @@ void LayerNormGrad(
     const T cur_dy = dy[batch_idx + i];
     const T centered_x = x[batch_idx + i] - mean;
 
-    const T db = alpha[i] * cur_dy;
+    const T db = gamma[i] * cur_dy;
     dx[batch_idx + i] = (static_cast<T>(2.0) * centered_x * dsigma / hidden_size) +
                         (invstd * db) +
                         (dmu / hidden_size);
@@ -101,18 +101,18 @@ template<typename T>
 BackwardPass<T>::BackwardPass(
     const int batch_size,
     const int hidden_size,
-    const T* alpha,
+    const T* gamma,
     const T* beta,
     const T* x,
-    T* dalpha,
+    T* dgamma,
     T* dbeta,
     T* cache)
         : batch_size_(batch_size),
           hidden_size_(hidden_size),
-          alpha_(alpha),
+          gamma_(gamma),
           beta_(beta),
           x_(x),
-          dalpha_(dalpha),
+          dgamma_(dgamma),
           dbeta_(dbeta),
           cache_(cache),
           partial_(batch_size) {
@@ -135,17 +135,31 @@ void BackwardPass<T>::RunPartial(
   dim3 gridDim;
   gridDim.x = (minibatch + blockDim.x - 1) / blockDim.x;
   const int shared_mem_size = sizeof(T) * blockDim.x * blockDim.y * 3;
-  LayerNormGrad<T><<<gridDim, blockDim, shared_mem_size, stream>>>(
-      minibatch,
-      hidden_size_,
-      alpha_,
-      beta_,
-      x_ + (partial_ - minibatch) * hidden_size_,
-      dy,
-      dalpha_,
-      dbeta_,
-      dx,
-      cache_ + (partial_ - minibatch) * 2);
+
+  if (beta_ && dbeta_) {
+    LayerNormGrad<T, true><<<gridDim, blockDim, shared_mem_size, stream>>>(
+        minibatch,
+        hidden_size_,
+        gamma_,
+        x_ + (partial_ - minibatch) * hidden_size_,
+        dy,
+        dgamma_,
+        dbeta_,
+        dx,
+        cache_ + (partial_ - minibatch) * 2);
+  } else {
+    LayerNormGrad<T, false><<<gridDim, blockDim, shared_mem_size, stream>>>(
+        minibatch,
+        hidden_size_,
+        gamma_,
+        x_ + (partial_ - minibatch) * hidden_size_,
+        dy,
+        dgamma_,
+        nullptr,
+        dx,
+        cache_ + (partial_ - minibatch) * 2);
+  }
+
   partial_ -= minibatch;
 }
 

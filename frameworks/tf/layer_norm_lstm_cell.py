@@ -43,9 +43,8 @@ class LayerNormLSTMCell(rnn_cell.RNNCell):
     self.kernel = None
     self.recurrent_kernel = None
     self.bias = None
-    self.alpha = None
-    self.beta = None
-    self.alpha_h = None
+    self.gamma = None
+    self.gamma_h = None
     self.beta_h = None
     self.built = False
 
@@ -67,10 +66,10 @@ class LayerNormLSTMCell(rnn_cell.RNNCell):
       self._kernel = v1.get_variable('kernel', shape=[input_size + num_units, num_units * 4])
       self.kernel, self.recurrent_kernel = tf.split(self._kernel, [input_size, num_units], axis=0)
       self.bias = v1.get_variable('bias', shape=[num_units * 4], initializer=v1.initializers.zeros())
-      self.alpha = v1.get_variable('alpha', shape=[2, num_units * 4], initializer=v1.initializers.ones())
-      self.beta = v1.get_variable('beta', shape=[2, num_units * 4], initializer=v1.initializers.zeros())
-      self.alpha_h = v1.get_variable('alpha_h', shape=[num_units], initializer=v1.initializers.ones())
+      self.gamma = v1.get_variable('gamma', shape=[2, num_units * 4], initializer=v1.initializers.ones())
+      self.gamma_h = v1.get_variable('gamma_h', shape=[num_units], initializer=v1.initializers.ones())
       self.beta_h = v1.get_variable('beta_h', shape=[num_units], initializer=v1.initializers.zeros())
+      self.null = tf.zeros_like(self.gamma[0])
     self.built = True
 
   def __call__(self, inputs, state, scope=None):
@@ -78,8 +77,8 @@ class LayerNormLSTMCell(rnn_cell.RNNCell):
 
     R = tf.nn.dropout(self.recurrent_kernel, rate=self.dropout)
 
-    Wx = self._layer_norm(tf.matmul(inputs, self.kernel), self.alpha[0], self.beta[0])
-    Rh = self._layer_norm(tf.matmul(state.h, R), self.alpha[1], self.beta[1])
+    Wx = self._layer_norm(tf.matmul(inputs, self.kernel), self.gamma[0], self.null)
+    Rh = self._layer_norm(tf.matmul(state.h, R), self.gamma[1], self.null)
     v = Wx + Rh + self.bias
     v_i, v_g, v_f, v_o = tf.split(v, 4, axis=-1)
     i = tf.nn.sigmoid(v_i)
@@ -87,11 +86,11 @@ class LayerNormLSTMCell(rnn_cell.RNNCell):
     f = tf.nn.sigmoid(v_f)
     o = tf.nn.sigmoid(v_o)
     c_new = f * state.c + i * g
-    c_tanh = tf.nn.tanh(self._layer_norm(c_new, self.alpha_h, self.beta_h))
+    c_tanh = tf.nn.tanh(self._layer_norm(c_new, self.gamma_h, self.beta_h))
     h_new = o * c_tanh
 
     return h_new, rnn_cell.LSTMStateTuple(c_new, h_new)
 
-  def _layer_norm(self, x, alpha, beta):
+  def _layer_norm(self, x, gamma, beta):
     mean, variance = tf.nn.moments(x, axes=[-1], keepdims=True)
-    return tf.nn.batch_normalization(x, mean, variance, beta, alpha, 1e-5)
+    return tf.nn.batch_normalization(x, mean, variance, beta, gamma, 1e-5)

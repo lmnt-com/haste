@@ -24,19 +24,19 @@ namespace layer_norm {
 template<typename T>
 class ForwardPass {
   public:
-    // alpha: [H]
+    // gamma: [H]
     // beta: [H]
     // cache: [N,2]
     ForwardPass(
         const int batch_size,
         const int hidden_size,
-        const T* alpha,
+        const T* gamma,
         const T* beta,
         T* cache);
 
     // Computes the layer norm of an input tensor `x` over its innermost (fastest changing)
-    // dimension. The layer norm is defined as: \(\frac{x-\mu}{\sigma} \alpha + \beta\)
-    // where `\alpha` and `\beta` are trainable parameters.
+    // dimension. The layer norm is defined as: \(\frac{x-\mu}{\sigma} \gamma + \beta\)
+    // where `\gamma` and `\beta` are trainable parameters.
     //
     // x: [N,H]
     // y: [N,H]
@@ -51,7 +51,7 @@ class ForwardPass {
   private:
     const int batch_size_;
     const int hidden_size_;
-    const T* alpha_;
+    const T* gamma_;
     const T* beta_;
     T* cache_;
     int partial_;
@@ -63,10 +63,10 @@ class BackwardPass {
     BackwardPass(
         const int batch_size,
         const int hidden_size,
-        const T* alpha,
+        const T* gamma,
         const T* beta,
         const T* x,
-        T* dalpha,
+        T* dgamma,
         T* dbeta,
         T* cache);
 
@@ -81,10 +81,10 @@ class BackwardPass {
   private:
     const int batch_size_;
     const int hidden_size_;
-    const T* alpha_;
+    const T* gamma_;
     const T* beta_;
     const T* x_;
-    T* dalpha_;
+    T* dgamma_;
     T* dbeta_;
     T* cache_;
     int partial_;

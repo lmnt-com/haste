@@ -61,11 +61,10 @@ def lstm_gradient(op, *grads):
   W = op.inputs[1]
   R = op.inputs[2]
   b = op.inputs[3]
-  alpha = op.inputs[4]
-  beta = op.inputs[5]
-  alpha_h = op.inputs[6]
-  beta_h = op.inputs[7]
-  zoneout_mask = op.inputs[8]
+  gamma = op.inputs[4]
+  gamma_h = op.inputs[5]
+  beta_h = op.inputs[6]
+  zoneout_mask = op.inputs[7]
   h = op.outputs[0]
   c = op.outputs[1]
   cache = op.outputs[2]
@@ -75,14 +74,13 @@ def lstm_gradient(op, *grads):
   W = tf.transpose(W, [1, 0])
   R = tf.transpose(R, [1, 0])
 
-  dx, dW, dR, db, dalpha, dbeta, dalpha_h, dbeta_h = LIB.haste_layer_norm_lstm_grad(
+  dx, dW, dR, db, dgamma, dgamma_h, dbeta_h = LIB.haste_layer_norm_lstm_grad(
       x,
       W,
       R,
       b,
-      alpha,
-      beta,
-      alpha_h,
+      gamma,
+      gamma_h,
       beta_h,
       h,
       c,
@@ -90,7 +88,7 @@ def lstm_gradient(op, *grads):
       grads[0],
       grads[1],
       zoneout_mask)
-  return [dx, dW, dR, db, dalpha, dbeta, dalpha_h, dbeta_h, None]
+  return [dx, dW, dR, db, dgamma, dgamma_h, dbeta_h, None]
 
 
 class LayerNormLSTMLayer(tf.Module):
@@ -119,9 +117,8 @@ class LayerNormLSTMLayer(tf.Module):
     self.kernel = None
     self.recurrent_kernel = None
     self.bias = None
-    self.alpha = None
-    self.beta = None
-    self.alpha_h = None
+    self.gamma = None
+    self.gamma_h = None
     self.beta_h = None
     self.built = False
 
@@ -154,9 +151,8 @@ class LayerNormLSTMLayer(tf.Module):
       self._kernel = v1.get_variable('kernel', initializer=weights)
       self.kernel, self.recurrent_kernel = tf.split(self._kernel, [input_size, num_units], axis=0)
       self.bias = v1.get_variable('bias', initializer=biases)
-      self.alpha = v1.get_variable('alpha', shape=[2, self.num_units * 4], initializer=v1.initializers.ones())
-      self.beta = v1.get_variable('beta', shape=[2, self.num_units * 4], initializer=v1.initializers.zeros())
-      self.alpha_h = v1.get_variable('alpha_h', shape=[self.num_units], initializer=v1.initializers.ones())
+      self.gamma = v1.get_variable('gamma', shape=[2, self.num_units * 4], initializer=v1.initializers.ones())
+      self.gamma_h = v1.get_variable('gamma_h', shape=[self.num_units], initializer=v1.initializers.ones())
       self.beta_h = v1.get_variable('beta_h', shape=[self.num_units], initializer=v1.initializers.zeros())
     self.built = True
 
@@ -190,9 +186,8 @@ class LayerNormLSTMLayer(tf.Module):
         self.kernel,
         recurrent_kernel,
         self.bias,
-        self.alpha,
-        self.beta,
-        self.alpha_h,
+        self.gamma,
+        self.gamma_h,
         self.beta_h,
         zoneout_mask,
         training=training,

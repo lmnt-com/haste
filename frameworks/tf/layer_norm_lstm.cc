@@ -43,9 +43,8 @@ REGISTER_OP("HasteLayerNormLstm")
     .Input("kernel: R")                 // [C,H*4]
     .Input("recurrent_kernel: R")       // [H,H*4]
     .Input("bias: R")                   // [H*4]
-    .Input("alpha: R")
-    .Input("beta: R")
-    .Input("alpha_h: R")
+    .Input("gamma: R")
+    .Input("gamma_h: R")
     .Input("beta_h: R")
     .Input("zoneout_mask: R")           // [T,N,H]
     .Output("h: R")                     // [T,N,H]
@@ -56,9 +55,8 @@ REGISTER_OP("HasteLayerNormLstm")
       ShapeHandle kernel_shape;
       ShapeHandle recurrent_shape;
       ShapeHandle bias_shape;
-      ShapeHandle alpha_shape;
-      ShapeHandle beta_shape;
-      ShapeHandle alpha_h_shape;
+      ShapeHandle gamma_shape;
+      ShapeHandle gamma_h_shape;
       ShapeHandle beta_h_shape;
       ShapeHandle zoneout_mask_shape;
 
@@ -66,11 +64,10 @@ REGISTER_OP("HasteLayerNormLstm")
       TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 2, &kernel_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 2, &recurrent_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 1, &bias_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 2, &alpha_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(5), 2, &beta_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(6), 1, &alpha_h_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(7), 1, &beta_h_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(8), 3, &zoneout_mask_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 2, &gamma_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(5), 1, &gamma_h_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(6), 1, &beta_h_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(7), 3, &zoneout_mask_shape));
 
       const DimensionHandle time_steps = c->Dim(input_shape, 0);
       const DimensionHandle batch_size = c->Dim(input_shape, 1);
@@ -100,11 +97,10 @@ struct HasteLayerNormLstmOp : public OpKernel {
     const Tensor& kernel = context->input(1);
     const Tensor& recurrent_kernel = context->input(2);
     const Tensor& bias = context->input(3);
-    const Tensor& alpha = context->input(4);
-    const Tensor& beta = context->input(5);
-    const Tensor& alpha_h = context->input(6);
-    const Tensor& beta_h = context->input(7);
-    const Tensor& zoneout_mask = context->input(8);
+    const Tensor& gamma = context->input(4);
+    const Tensor& gamma_h = context->input(5);
+    const Tensor& beta_h = context->input(6);
+    const Tensor& zoneout_mask = context->input(7);
 
     const auto time_steps = input.shape().dim_size(0);
     const auto batch_size = input.shape().dim_size(1);
@@ -159,21 +155,21 @@ struct HasteLayerNormLstmOp : public OpKernel {
     layer_norm::ForwardPass<T> layer_norm1(
         time_steps * batch_size,
         hidden_size * 4,
-        alpha.SubSlice(0).unaligned_flat<T>().data(),
-        beta.SubSlice(0).unaligned_flat<T>().data(),
+        gamma.SubSlice(0).unaligned_flat<T>().data(),
+        nullptr,
         act_Wx_norm_cache.data());
 
     layer_norm::ForwardPass<T> layer_norm2(
         time_steps * batch_size,
         hidden_size * 4,
-        alpha.SubSlice(1).unaligned_flat<T>().data(),
-        beta.SubSlice(1).unaligned_flat<T>().data(),
+        gamma.SubSlice(1).unaligned_flat<T>().data(),
+        nullptr,
         act_Rh_norm_cache.data());
 
     layer_norm::ForwardPass<T> layer_norm3(
         time_steps * batch_size,
         hidden_size,
-        alpha_h.flat<T>().data(),
+        gamma_h.flat<T>().data(),
         beta_h.flat<T>().data(),
         act_c_norm_cache.data());
 
@@ -218,9 +214,8 @@ REGISTER_OP("HasteLayerNormLstmGrad")
     .Input("kernel_t: R")              // [H*4,C]
     .Input("recurrent_kernel_t: R")    // [H*4,H]
     .Input("bias: R")                  // [H*4]
-    .Input("alpha: R")
-    .Input("beta: R")
-    .Input("alpha_h: R")
+    .Input("gamma: R")
+    .Input("gamma_h: R")
     .Input("beta_h: R")
     .Input("h: R")                     // [T,N,H]
     .Input("c: R")                     // [T,N,H]
@@ -232,18 +227,16 @@ REGISTER_OP("HasteLayerNormLstmGrad")
     .Output("dw: R")                   // [C,H*4]
     .Output("dr: R")                   // [H,H*4]
     .Output("db: R")                   // [H*4]
-    .Output("dalpha: R")
-    .Output("dbeta: R")
-    .Output("dalpha_h: R")
+    .Output("dgamma: R")
+    .Output("dgamma_h: R")
     .Output("dbeta_h: R")
     .SetShapeFn([](InferenceContext* c) {
       ShapeHandle x_shape;
       ShapeHandle kernel_shape;
       ShapeHandle recurrent_kernel_shape;
       ShapeHandle bias_shape;
-      ShapeHandle alpha_shape;
-      ShapeHandle beta_shape;
-      ShapeHandle alpha_h_shape;
+      ShapeHandle gamma_shape;
+      ShapeHandle gamma_h_shape;
       ShapeHandle beta_h_shape;
       ShapeHandle h_shape;
       ShapeHandle c_shape;
@@ -256,16 +249,15 @@ REGISTER_OP("HasteLayerNormLstmGrad")
       TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 2, &kernel_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 2, &recurrent_kernel_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 1, &bias_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 2, &alpha_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(5), 2, &beta_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(6), 1, &alpha_h_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(7), 1, &beta_h_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(8), 3, &h_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(9), 3, &c_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(10), 1, &cache_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(11), 3, &dh_new_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(12), 3, &dc_new_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(13), 3, &zoneout_mask_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 2, &gamma_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(5), 1, &gamma_h_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(6), 1, &beta_h_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(7), 3, &h_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(8), 3, &c_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(9), 1, &cache_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(10), 3, &dh_new_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(11), 3, &dc_new_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(12), 3, &zoneout_mask_shape));
 
       DimensionHandle input_size = c->Dim(x_shape, 0);
       DimensionHandle time_steps = c->Dim(x_shape, 1);
@@ -279,10 +271,9 @@ REGISTER_OP("HasteLayerNormLstmGrad")
       c->set_output(1, c->MakeShape({ input_size, hidden_size_4 }));
       c->set_output(2, c->MakeShape({ hidden_size, hidden_size_4 }));
       c->set_output(3, bias_shape);
-      c->set_output(4, alpha_shape);
-      c->set_output(5, beta_shape);
-      c->set_output(6, alpha_h_shape);
-      c->set_output(7, beta_h_shape);
+      c->set_output(4, gamma_shape);
+      c->set_output(5, gamma_h_shape);
+      c->set_output(6, beta_h_shape);
       return Status::OK();
     });
 
@@ -295,16 +286,15 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
     const Tensor& kernel = context->input(1);
     const Tensor& recurrent_kernel = context->input(2);
     const Tensor& bias = context->input(3);
-    const Tensor& alpha = context->input(4);
-    const Tensor& beta = context->input(5);
-    const Tensor& alpha_h = context->input(6);
-    const Tensor& beta_h = context->input(7);
-    const Tensor& h_vector = context->input(8);
-    const Tensor& c_vector = context->input(9);
-    const Tensor& cache_input = context->input(10);
-    const Tensor& dh_new = context->input(11);
-    const Tensor& dc_new = context->input(12);
-    const Tensor& zoneout_mask = context->input(13);
+    const Tensor& gamma = context->input(4);
+    const Tensor& gamma_h = context->input(5);
+    const Tensor& beta_h = context->input(6);
+    const Tensor& h_vector = context->input(7);
+    const Tensor& c_vector = context->input(8);
+    const Tensor& cache_input = context->input(9);
+    const Tensor& dh_new = context->input(10);
+    const Tensor& dc_new = context->input(11);
+    const Tensor& zoneout_mask = context->input(12);
 
     const auto input_size = input.shape().dim_size(0);
     const auto time_steps = input.shape().dim_size(1);
@@ -334,20 +324,16 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
     OP_REQUIRES_OK(context, context->allocate_output(3, db_shape, &db));
 
     // Needs to be initialized to 0.
-    Tensor* dalpha = nullptr;
-    OP_REQUIRES_OK(context, context->allocate_output(4, alpha.shape(), &dalpha));
+    Tensor* dgamma = nullptr;
+    OP_REQUIRES_OK(context, context->allocate_output(4, gamma.shape(), &dgamma));
 
     // Needs to be initialized to 0.
-    Tensor* dbeta = nullptr;
-    OP_REQUIRES_OK(context, context->allocate_output(5, beta.shape(), &dbeta));
-
-    // Needs to be initialized to 0.
-    Tensor* dalpha_h = nullptr;
-    OP_REQUIRES_OK(context, context->allocate_output(6, alpha_h.shape(), &dalpha_h));
+    Tensor* dgamma_h = nullptr;
+    OP_REQUIRES_OK(context, context->allocate_output(5, gamma_h.shape(), &dgamma_h));
 
     // Needs to be initialized to 0.
     Tensor* dbeta_h = nullptr;
-    OP_REQUIRES_OK(context, context->allocate_output(7, beta_h.shape(), &dbeta_h));
+    OP_REQUIRES_OK(context, context->allocate_output(6, beta_h.shape(), &dbeta_h));
 
     // Needs to be initialized to 0.
     const TensorShape dh_shape = { batch_size, hidden_size };
@@ -385,9 +371,8 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
     cudaMemset(dW->flat<T>().data(), 0, dW->AllocatedBytes());
     cudaMemset(dR->flat<T>().data(), 0, dR->AllocatedBytes());
     cudaMemset(db->flat<T>().data(), 0, db->AllocatedBytes());
-    cudaMemset(dalpha->flat<T>().data(), 0, dalpha->AllocatedBytes());
-    cudaMemset(dbeta->flat<T>().data(), 0, dbeta->AllocatedBytes());
-    cudaMemset(dalpha_h->flat<T>().data(), 0, dalpha_h->AllocatedBytes());
+    cudaMemset(dgamma->flat<T>().data(), 0, dgamma->AllocatedBytes());
+    cudaMemset(dgamma_h->flat<T>().data(), 0, dgamma_h->AllocatedBytes());
     cudaMemset(dbeta_h->flat<T>().data(), 0, dbeta_h->AllocatedBytes());
     cudaMemset(dh.flat<T>().data(), 0, dh.AllocatedBytes());
     cudaMemset(dc.flat<T>().data(), 0, dc.AllocatedBytes());
@@ -395,30 +380,30 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
     layer_norm::BackwardPass<T> layer_norm1(
         time_steps * batch_size,
         hidden_size * 4,
-        alpha.SubSlice(0).unaligned_flat<T>().data(),
-        beta.SubSlice(0).unaligned_flat<T>().data(),
+        gamma.SubSlice(0).unaligned_flat<T>().data(),
+        nullptr,
         act_Wx.data(),
-        dalpha->SubSlice(0).unaligned_flat<T>().data(),
-        dbeta->SubSlice(0).unaligned_flat<T>().data(),
+        dgamma->SubSlice(0).unaligned_flat<T>().data(),
+        nullptr,
         act_Wx_norm_cache.data());
 
     layer_norm::BackwardPass<T> layer_norm2(
         time_steps * batch_size,
         hidden_size * 4,
-        alpha.SubSlice(1).unaligned_flat<T>().data(),
-        beta.SubSlice(1).unaligned_flat<T>().data(),
+        gamma.SubSlice(1).unaligned_flat<T>().data(),
+        nullptr,
         act_Rh.data(),
-        dalpha->SubSlice(1).unaligned_flat<T>().data(),
-        dbeta->SubSlice(1).unaligned_flat<T>().data(),
+        dgamma->SubSlice(1).unaligned_flat<T>().data(),
+        nullptr,
         act_Rh_norm_cache.data());
 
     layer_norm::BackwardPass<T> layer_norm3(
         time_steps * batch_size,
         hidden_size,
-        alpha_h.flat<T>().data(),
+        gamma_h.flat<T>().data(),
         beta_h.flat<T>().data(),
         c_vector.SubSlice(1).unaligned_flat<T>().data(),
-        dalpha_h->flat<T>().data(),
+        dgamma_h->flat<T>().data(),
         dbeta_h->flat<T>().data(),
         act_c_norm_cache.data());
 

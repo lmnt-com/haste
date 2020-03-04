@@ -33,17 +33,17 @@ using tensorflow::shape_inference::ShapeHandle;
 REGISTER_OP("HasteLayerNorm")
     .Attr("R: {float, double}")
     .Input("x: R")
-    .Input("alpha: R")
+    .Input("gamma: R")
     .Input("beta: R")
     .Output("y: R")
     .Output("cache: R")
     .SetShapeFn([](InferenceContext* c) {
       ShapeHandle input_shape;
-      ShapeHandle alpha_shape;
+      ShapeHandle gamma_shape;
       ShapeHandle beta_shape;
 
       TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 2, &input_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 1, &alpha_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 1, &gamma_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 1, &beta_shape));
 
       c->set_output(0, input_shape);
@@ -57,7 +57,7 @@ struct HasteLayerNormOp : public OpKernel {
 
   void Compute(OpKernelContext* context) override {
     const Tensor& x = context->input(0);
-    const Tensor& alpha = context->input(1);
+    const Tensor& gamma = context->input(1);
     const Tensor& beta = context->input(2);
 
     const auto batch_size = x.shape().dim_size(0);
@@ -72,8 +72,8 @@ struct HasteLayerNormOp : public OpKernel {
     ForwardPass<T> forward(
         batch_size,
         hidden_size,
-        alpha.flat<T>().data(),
-        beta.flat<T>().data(),
+        gamma.flat<T>().data(),
+        beta.shape().dim_size(0) ? beta.flat<T>().data() : nullptr,
         cache->flat<T>().data());
 
     forward.Run(GetCudaStream(context), x.flat<T>().data(), y->flat<T>().data());
@@ -86,28 +86,28 @@ REGISTER_GPU_KERNEL(HasteLayerNorm, double);
 REGISTER_OP("HasteLayerNormGrad")
     .Attr("R: {float, double}")
     .Input("x: R")
-    .Input("alpha: R")
+    .Input("gamma: R")
     .Input("beta: R")
     .Input("dy: R")
     .Input("cache: R")
     .Output("dx: R")
-    .Output("dalpha: R")
+    .Output("dgamma: R")
     .Output("dbeta: R")
     .SetShapeFn([](InferenceContext* c) {
       ShapeHandle x_shape;
-      ShapeHandle alpha_shape;
+      ShapeHandle gamma_shape;
       ShapeHandle beta_shape;
       ShapeHandle dy_shape;
       ShapeHandle cache_shape;
 
       TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 2, &x_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 1, &alpha_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 1, &gamma_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 1, &beta_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 2, &dy_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 2, &cache_shape));
 
       c->set_output(0, x_shape);
-      c->set_output(1, alpha_shape);
+      c->set_output(1, gamma_shape);
       c->set_output(2, beta_shape);
       return Status::OK();
     });
@@ -118,7 +118,7 @@ struct HasteLayerNormGradOp : public OpKernel {
 
   void Compute(OpKernelContext* context) override {
     const Tensor& x = context->input(0);
-    const Tensor& alpha = context->input(1);
+    const Tensor& gamma = context->input(1);
     const Tensor& beta = context->input(2);
     const Tensor& dy = context->input(3);
     const Tensor& cache = context->input(4);
@@ -131,23 +131,23 @@ struct HasteLayerNormGradOp : public OpKernel {
     Tensor* dx = nullptr;
     OP_REQUIRES_OK(context, context->allocate_output(0, x.shape(), &dx));
 
-    Tensor* dalpha = nullptr;
-    OP_REQUIRES_OK(context, context->allocate_output(1, alpha.shape(), &dalpha));
+    Tensor* dgamma = nullptr;
+    OP_REQUIRES_OK(context, context->allocate_output(1, gamma.shape(), &dgamma));
 
     Tensor* dbeta = nullptr;
     OP_REQUIRES_OK(context, context->allocate_output(2, beta.shape(), &dbeta));
 
-    cudaMemset(dalpha->flat<T>().data(), 0, dalpha->AllocatedBytes());
+    cudaMemset(dgamma->flat<T>().data(), 0, dgamma->AllocatedBytes());
     cudaMemset(dbeta->flat<T>().data(), 0, dbeta->AllocatedBytes());
 
     BackwardPass<T> backward(
         batch_size,
         hidden_size,
-        alpha.flat<T>().data(),
-        beta.flat<T>().data(),
+        gamma.flat<T>().data(),
+        beta.shape().dim_size(0) ? beta.flat<T>().data() : nullptr,
         x.flat<T>().data(),
-        dalpha->flat<T>().data(),
-        dbeta->flat<T>().data(),
+        dgamma->flat<T>().data(),
+        beta.shape().dim_size(0) ? dbeta->flat<T>().data() : nullptr,
         const_cast<T*>(cache.flat<T>().data()));
 
     backward.Run(GetCudaStream(context), dy.flat<T>().data(), dx->flat<T>().data());

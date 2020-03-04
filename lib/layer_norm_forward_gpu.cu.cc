@@ -19,12 +19,12 @@
 
 namespace {
 
-template<typename T>
+template<typename T, bool ApplyBeta>
 __global__
 void LayerNorm(
     const int batch_size,
     const int hidden_size,
-    const T* alpha,
+    const T* gamma,
     const T* beta,
     const T* x,
     T* y,
@@ -76,8 +76,12 @@ void LayerNorm(
 
   const T invstd = rsqrt(shared[batch_block_idx] / hidden_size + static_cast<T>(1e-5));
 
-  for (int i = index; i < hidden_size; i += stride)
-    y[batch_idx + i] = (x[batch_idx + i] - mean) * invstd * alpha[i] + beta[i];
+  for (int i = index; i < hidden_size; i += stride) {
+    if (ApplyBeta)
+      y[batch_idx + i] = (x[batch_idx + i] - mean) * invstd * gamma[i] + beta[i];
+    else
+      y[batch_idx + i] = (x[batch_idx + i] - mean) * invstd * gamma[i];
+  }
 
   cache[batch * 2 + 0] = mean;
   cache[batch * 2 + 1] = invstd;
@@ -93,12 +97,12 @@ template<typename T>
 ForwardPass<T>::ForwardPass(
     const int batch_size,
     const int hidden_size,
-    const T* alpha,
+    const T* gamma,
     const T* beta,
     T* cache)
         : batch_size_(batch_size),
           hidden_size_(hidden_size),
-          alpha_(alpha),
+          gamma_(gamma),
           beta_(beta),
           cache_(cache),
           partial_(0) {
@@ -121,14 +125,27 @@ void ForwardPass<T>::RunPartial(
   dim3 gridDim;
   gridDim.x = (minibatch + blockDim.x - 1) / blockDim.x;
   const int shared_mem_size = sizeof(T) * blockDim.x * blockDim.y;
-  LayerNorm<T><<<gridDim, blockDim, shared_mem_size, stream>>>(
-      minibatch,
-      hidden_size_,
-      alpha_,
-      beta_,
-      x,
-      y,
-      cache_ + partial_ * 2);
+
+  if (beta_) {
+    LayerNorm<T, true><<<gridDim, blockDim, shared_mem_size, stream>>>(
+        minibatch,
+        hidden_size_,
+        gamma_,
+        beta_,
+        x,
+        y,
+        cache_ + partial_ * 2);
+  } else {
+    LayerNorm<T, false><<<gridDim, blockDim, shared_mem_size, stream>>>(
+        minibatch,
+        hidden_size_,
+        gamma_,
+        nullptr,
+        x,
+        y,
+        cache_ + partial_ * 2);
+  }
+
   partial_ += minibatch;
 }
 

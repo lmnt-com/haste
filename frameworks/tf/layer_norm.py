@@ -32,18 +32,18 @@ LIB = tf.load_op_library(pkg_resources.resource_filename(__name__, 'libhaste_tf.
 @tf.RegisterGradient("HasteLayerNorm")
 def layer_norm_gradient(op, *grads):
   x = op.inputs[0]
-  alpha = op.inputs[1]
+  gamma = op.inputs[1]
   beta = op.inputs[2]
   cache = op.outputs[1]
 
-  return LIB.haste_layer_norm_grad(x, alpha, beta, grads[0], cache)
+  return LIB.haste_layer_norm_grad(x, gamma, beta, grads[0], cache)
 
 
 class LayerNorm(tf.Module):
   def __init__(self, name=None):
     super(LayerNorm, self).__init__(name)
     self.realname = name
-    self.alpha = None
+    self.gamma = None
     self.beta = None
     self.built = False
 
@@ -52,11 +52,11 @@ class LayerNorm(tf.Module):
       return
     hidden_size = int(shape[-1])
     with self.name_scope, v1.variable_scope(self.realname, 'layer_norm'):
-      self.alpha = v1.get_variable('alpha', shape=[hidden_size], initializer=v1.initializers.ones())
+      self.gamma = v1.get_variable('gamma', shape=[hidden_size], initializer=v1.initializers.ones())
       self.beta = v1.get_variable('beta', shape=[hidden_size], initializer=v1.initializers.zeros())
     self.built = True
 
   def __call__(self, x):
     self.build(x.shape)
-    y, _ = LIB.haste_layer_norm(x, self.alpha, self.beta)
+    y, _ = LIB.haste_layer_norm(x, self.gamma, self.beta)
     return y
