@@ -22,6 +22,7 @@ from .gru import GRU
 from .gru_cell import GRUCell
 from .layer_norm import LayerNorm
 from .layer_norm_lstm import LayerNormLSTM
+from .layer_norm_lstm_cell import LayerNormLSTMCell
 from .lstm import LSTM
 from .zoneout_wrapper import ZoneoutWrapper
 
@@ -31,6 +32,7 @@ __all__ = [
     'GRUCell',
     'LayerNorm',
     'LayerNormLSTM',
+    'LayerNormLSTMCell',
     'LSTM',
     'ZoneoutWrapper'
 ]
