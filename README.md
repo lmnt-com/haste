@@ -9,6 +9,7 @@ Haste is a CUDA implementation of fused [LSTM](https://en.wikipedia.org/wiki/Lon
 What's included in this project?
 - a standalone C++ API (`libhaste`)
 - a TensorFlow Python API (`haste_tf`)
+- a PyTorch API (`haste_pytorch`)
 - examples for writing your own custom C++ inference / training code using `libhaste`
 - benchmarking programs to evaluate the performance of RNN implementations
 
@@ -48,6 +49,7 @@ Here is our complete benchmark result grid:
 Here's what you'll need to get started:
 - a [CUDA Compute Capability](https://developer.nvidia.com/cuda-gpus) 6.0+ GPU (required)
 - [TensorFlow GPU](https://www.tensorflow.org/install/gpu) 1.14+ or 2.0+ for TensorFlow integration (optional)
+- [PyTorch](https://pytorch.org) 1.2+ for PyTorch integration (optional)
 - [Eigen 3](http://eigen.tuxfamily.org/) to build the C++ examples (optional)
 - [cuDNN Developer Library](https://developer.nvidia.com/rdp/cudnn-archive) to build benchmarking programs (optional)
 
@@ -77,6 +79,7 @@ The C++ API is documented in [`lib/haste.h`](lib/haste.h) and there are code sam
 - [`docs/tf/`](docs/tf): API reference documentation for `haste_tf`
 - [`examples/`](examples): examples for writing your own C++ inference / training code using `libhaste`
 - [`frameworks/tf/`](frameworks/tf): TensorFlow Python API and custom op code
+- [`frameworks/pytorch/`](frameworks/pytorch): PyTorch API and custom op code
 - [`lib/`](lib): CUDA kernels and C++ API
 
 ## Implementation notes
