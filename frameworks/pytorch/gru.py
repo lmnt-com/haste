@@ -79,7 +79,7 @@ class GRU(nn.Module):
     nn.init.zeros_(self.bias)
     nn.init.zeros_(self.recurrent_bias)
 
-  def forward(self, input):
+  def forward(self, input, lengths=None):
     if self.batch_first:
       input = input.permute(1, 0, 2)
 
@@ -103,9 +103,13 @@ class GRU(nn.Module):
         self.recurrent_bias.contiguous(),
         zoneout_mask.contiguous())
 
-    output = h
-    state = h[-1].unsqueeze(0)
+    if lengths is not None:
+      cols = range(h.size(1))
+      state = h[[lengths, cols]].unsqueeze(0)
+    else:
+      state = h[-1].unsqueeze(0)
 
+    output = h
     if self.batch_first:
       output = output.permute(1, 0, 2)
 

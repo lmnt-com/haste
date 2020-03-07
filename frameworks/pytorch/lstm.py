@@ -81,7 +81,7 @@ class LSTM(nn.Module):
     nn.init.zeros_(self.bias)
     nn.init.constant_(self.bias[hidden_size*2:hidden_size*3], self.forget_bias)
 
-  def forward(self, input):
+  def forward(self, input, lengths=None):
     if self.batch_first:
       input = input.permute(1, 0, 2)
 
@@ -104,9 +104,13 @@ class LSTM(nn.Module):
         self.bias.contiguous(),
         zoneout_mask.contiguous())
 
-    output = h[1:]
-    state = (h[-1].unsqueeze(0), c[-1].unsqueeze(0))
+    if lengths is not None:
+      cols = range(h.size(1))
+      state = (h[[lengths, cols]].unsqueeze(0), c[[lengths, cols]].unsqueeze(0))
+    else:
+      state = (h[-1].unsqueeze(0), c[-1].unsqueeze(0))
 
+    output = h[1:]
     if self.batch_first:
       output = output.permute(1, 0, 2)
 
