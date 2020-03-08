@@ -1,5 +1,5 @@
 <div itemscope itemtype="http://developers.google.com/ReferenceObject">
-<meta itemprop="name" content="haste_tf.ZoneoutWrapper" />
+<meta itemprop="name" content="haste_tf.LayerNormLSTMCell" />
 <meta itemprop="path" content="Stable" />
 <meta itemprop="property" content="activity_regularizer"/>
 <meta itemprop="property" content="dtype"/>
@@ -51,45 +51,38 @@
 <meta itemprop="property" content="zero_state"/>
 </div>
 
-# haste_tf.ZoneoutWrapper
+# haste_tf.LayerNormLSTMCell
 
 <!-- Insert buttons and diff -->
 
 
-## Class `ZoneoutWrapper`
+## Class `LayerNormLSTMCell`
 
-An LSTM/GRU cell wrapper that applies zoneout to the inner cell's hidden state.
+An LSTM cell that's compatible with the Haste LayerNormLSTM layer.
 
 
 
 <!-- Placeholder for "Used in" -->
 
-The zoneout paper applies zoneout to both the cell state and hidden state,
-each with its own zoneout rate. This class (and the `LSTM` implementation in Haste)
-applies zoneout to the hidden state and not the cell state.
+This cell can be used on hardware other than GPUs and with other TensorFlow
+classes that operate on RNN cells (e.g. `dynamic_rnn`, `BasicDecoder`, cell
+wrappers, etc.).
 
 <h2 id="__init__"><code><a name="__init__">__init__</a></code></h2>
 
 ``` python
 __init__(
-    cell,
-    rate,
-    training
+    num_units,
+    forget_bias=1.0,
+    dropout=0.0,
+    dtype=None,
+    name=None,
+    **kwargs
 )
 ```
 
-Initialize the parameters of the zoneout wrapper.
 
 
-#### Arguments:
-
-
-* <b>`cell`</b>: RNNCell, an instance of {`BasicLSTMCell`, `LSTMCell`,
-  `LSTMBlockCell`, <a href="../haste_tf/GRUCell.md"><code>haste_tf.GRUCell</code></a>} on which to apply zoneout.
-* <b>`rate`</b>: float, 0 <= rate <= 1, the percent of hidden units to zone out per
-  time step.
-* <b>`training`</b>: bool, `True` if used during training, `False` if used during
-  inference.
 
 
 
@@ -390,13 +383,27 @@ __call__(
 )
 ```
 
-Runs one step of the RNN cell with zoneout applied.
+Run this RNN cell on inputs, starting from the given state.
 
 
-#### Arguments:
+#### Args:
 
-see documentation for the inner cell.
 
+* <b>`inputs`</b>: `2-D` tensor with shape `[batch_size, input_size]`.
+* <b>`state`</b>: if `self.state_size` is an integer, this should be a `2-D Tensor`
+  with shape `[batch_size, self.state_size]`.  Otherwise, if
+  `self.state_size` is a tuple of integers, this should be a tuple with
+  shapes `[batch_size, s] for s in self.state_size`.
+* <b>`scope`</b>: VariableScope for the created subgraph; defaults to class name.
+
+
+#### Returns:
+
+
+* <b>`A pair containing`</b>: 
+- Output: A `2-D` tensor with shape `[batch_size, self.output_size]`.
+- New state: Either a single `2-D` tensor, or a tuple of tensors matching
+  the arity and shapes of `state`.
 
 <h3 id="apply"><code><a name="apply">apply</a></code></h3>
 
@@ -428,7 +435,7 @@ Output tensor(s).
 <h3 id="build"><code><a name="build">build</a></code></h3>
 
 ``` python
-build(_)
+build(shape)
 ```
 
 Creates the variables of the layer (optional, for subclass implementers).

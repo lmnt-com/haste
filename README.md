@@ -4,7 +4,7 @@
 
 --------------------------------------------------------------------------------
 
-Haste is a CUDA implementation of fused [LSTM](https://en.wikipedia.org/wiki/Long_short-term_memory) and [GRU](https://en.wikipedia.org/wiki/Gated_recurrent_unit) layers with built-in [DropConnect](http://proceedings.mlr.press/v28/wan13.html) and [Zoneout](https://arxiv.org/abs/1606.01305) regularization. These layers are exposed through C++ and Python APIs for easy integration into your own projects or machine learning frameworks.
+Haste is a CUDA implementation of fused [LSTM](https://en.wikipedia.org/wiki/Long_short-term_memory), [Layer Normalized LSTM](https://arxiv.org/abs/1607.06450), and [GRU](https://en.wikipedia.org/wiki/Gated_recurrent_unit) layers with built-in [DropConnect](http://proceedings.mlr.press/v28/wan13.html) and [Zoneout](https://arxiv.org/abs/1606.01305) regularization. These layers are exposed through C++ and Python APIs for easy integration into your own projects or machine learning frameworks.
 
 What's included in this project?
 - a standalone C++ API (`libhaste`)
@@ -53,30 +53,66 @@ Here's what you'll need to get started:
 - [Eigen 3](http://eigen.tuxfamily.org/) to build the C++ examples (optional)
 - [cuDNN Developer Library](https://developer.nvidia.com/rdp/cudnn-archive) to build benchmarking programs (optional)
 
-Once you have the prerequisites, run the following to build the code and install the TensorFlow API:
+Once you have the prerequisites, run one or more of the following to build the code:
 ```
-make && pip install haste_tf-*.whl
+make               # Build everything
+make haste         # ;) Build C++ API
+make haste_tf      # Build TensorFlow API
+make haste_pytorch # Build PyTorch API
+make examples
+make benchmarks
+```
+
+If you built the TensorFlow or PyTorch API, install it with `pip`:
+```
+pip install haste_tf-*.whl
+pip install haste_pytorch-*.whl
 ```
 
 ## Documentation
-Getting started with the TensorFlow API is easy:
+### TensorFlow API
 ```python
 import haste_tf as haste
 
+norm_lstm_layer = haste.LayerNormLSTM(num_units=256, direction='bidirectional', zoneout=0.1, dropout=0.05)
 lstm_layer = haste.LSTM(num_units=256, direction='bidirectional', zoneout=0.1, dropout=0.05)
 gru_layer = haste.GRU(num_units=256, direction='bidirectional', zoneout=0.1, dropout=0.05)
 
 # `x` is a tensor with shape [N,T,C]
+x = tf.random.normal([5, 25, 128])
+
+y, state = lstm_layer(x, training=True)
+y, state = gru_layer(x, training=True)
+```
+
+The TensorFlow Python API is documented in [`docs/tf/haste_tf.md`](docs/tf/haste_tf.md).
+
+### PyTorch API
+```python
+import torch
+import haste_pytorch as haste
+
+norm_lstm_layer = haste.LayerNormLSTM(input_size=128, hidden_size=256, zoneout=0.1, dropout=0.05)
+lstm_layer = haste.LSTM(input_size=128, hidden_size=256, zoneout=0.1, dropout=0.05)
+gru_layer = haste.GRU(input_size=128, hidden_size=256, zoneout=0.1, dropout=0.05)
+
+# `x` is a CUDA tensor with shape [T,N,C]
+x = torch.rand([25, 5, 128]).cuda()
+
+y, state = norm_lstm_layer(x)
 y, state = lstm_layer(x)
 y, state = gru_layer(x)
 ```
 
-The TensorFlow Python API is documented in [`docs/tf/haste_tf.md`](docs/tf/haste_tf.md).
-The C++ API is documented in [`lib/haste.h`](lib/haste.h) and there are code samples in [`examples/`](examples/).
+The PyTorch API is documented in [`docs/pytorch/haste_pytorch.md`](docs/pytorch/haste_pytorch.md).
+
+### C++ API
+The C++ API is documented in [`lib/haste/*.h`](lib/haste/) and there are code samples in [`examples/`](examples/).
 
 ## Code layout
 - [`benchmarks/`](benchmarks): programs to evaluate performance of RNN implementations
 - [`docs/tf/`](docs/tf): API reference documentation for `haste_tf`
+- [`docs/pytorch/`](docs/pytorch): API reference documentation for `haste_pytorch`
 - [`examples/`](examples): examples for writing your own C++ inference / training code using `libhaste`
 - [`frameworks/tf/`](frameworks/tf): TensorFlow Python API and custom op code
 - [`frameworks/pytorch/`](frameworks/pytorch): PyTorch API and custom op code
@@ -85,6 +121,7 @@ The C++ API is documented in [`lib/haste.h`](lib/haste.h) and there are code sam
 ## Implementation notes
 - the GRU implementation is based on `1406.1078v1` (same as cuDNN) rather than `1406.1078v3`
 - Zoneout on LSTM cells is applied to the hidden state only, and not the cell state
+- the layer normalized LSTM implementation uses [these equations](https://github.com/lmnt-com/haste/issues/1)
 
 ## References
 1. Hochreiter, S., & Schmidhuber, J. (1997). Long Short-Term Memory. _Neural Computation_, _9_(8), 1735–1780. https://doi.org/10.1162/neco.1997.9.8.1735

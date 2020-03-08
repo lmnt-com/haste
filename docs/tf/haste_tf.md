@@ -19,5 +19,11 @@ Haste: a fast, simple, and open RNN library.
 
 [`class LSTM`](./haste_tf/LSTM.md): Long Short-Term Memory layer.
 
+[`class LayerNorm`](./haste_tf/LayerNorm.md): Layer normalization layer.
+
+[`class LayerNormLSTM`](./haste_tf/LayerNormLSTM.md): Layer Normalized Long Short-Term Memory layer.
+
+[`class LayerNormLSTMCell`](./haste_tf/LayerNormLSTMCell.md): An LSTM cell that's compatible with the Haste LayerNormLSTM layer.
+
 [`class ZoneoutWrapper`](./haste_tf/ZoneoutWrapper.md): An LSTM/GRU cell wrapper that applies zoneout to the inner cell's hidden state.
 

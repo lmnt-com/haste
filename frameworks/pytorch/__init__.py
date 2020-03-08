@@ -13,6 +13,11 @@
 # limitations under the License.
 # ==============================================================================
 
+"""
+Haste: a fast, simple, and open RNN library.
+"""
+
+
 from .gru import GRU
 from .lstm import LSTM
 from .layer_norm_lstm import LayerNormLSTM

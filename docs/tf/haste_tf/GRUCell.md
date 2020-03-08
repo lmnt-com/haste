@@ -68,7 +68,7 @@ This cell can be used on hardware other than GPUs and with other TensorFlow
 classes that operate on RNN cells (e.g. `dynamic_rnn`, `BasicDecoder`, cell
 wrappers, etc.).
 
-<h2 id="__init__"><code>__init__</code></h2>
+<h2 id="__init__"><code><a name="__init__">__init__</a></code></h2>
 
 ``` python
 __init__(
@@ -370,7 +370,7 @@ A list of variables.
 
 ## Methods
 
-<h3 id="__call__"><code>__call__</code></h3>
+<h3 id="__call__"><code><a name="__call__">__call__</a></code></h3>
 
 ``` python
 __call__(
@@ -396,14 +396,13 @@ Run this RNN cell on inputs, starting from the given state.
 
 #### Returns:
 
-A pair containing:
 
+* <b>`A pair containing`</b>: 
 - Output: A `2-D` tensor with shape `[batch_size, self.output_size]`.
 - New state: Either a single `2-D` tensor, or a tuple of tensors matching
   the arity and shapes of `state`.
 
-
-<h3 id="apply"><code>apply</code></h3>
+<h3 id="apply"><code><a name="apply">apply</a></code></h3>
 
 ``` python
 apply(
@@ -430,7 +429,7 @@ This is an alias of `self.__call__`.
 Output tensor(s).
 
 
-<h3 id="build"><code>build</code></h3>
+<h3 id="build"><code><a name="build">build</a></code></h3>
 
 ``` python
 build(shape)
@@ -451,7 +450,7 @@ This is typically used to create the weights of `Layer` subclasses.
   `TensorShape` if the layer expects a list of inputs
   (one instance per input).
 
-<h3 id="compute_mask"><code>compute_mask</code></h3>
+<h3 id="compute_mask"><code><a name="compute_mask">compute_mask</a></code></h3>
 
 ``` python
 compute_mask(
@@ -476,7 +475,7 @@ None or a tensor (or list of tensors,
     one per output tensor of the layer).
 
 
-<h3 id="compute_output_shape"><code>compute_output_shape</code></h3>
+<h3 id="compute_output_shape"><code><a name="compute_output_shape">compute_output_shape</a></code></h3>
 
 ``` python
 compute_output_shape(input_shape)
@@ -501,7 +500,7 @@ to match that input shape provided.
 An input shape tuple.
 
 
-<h3 id="count_params"><code>count_params</code></h3>
+<h3 id="count_params"><code><a name="count_params">count_params</a></code></h3>
 
 ``` python
 count_params()
@@ -522,7 +521,7 @@ An integer count.
 * <b>`ValueError`</b>: if the layer isn't yet built
   (in which case its weights aren't yet defined).
 
-<h3 id="from_config"><code>from_config</code></h3>
+<h3 id="from_config"><code><a name="from_config">from_config</a></code></h3>
 
 ``` python
 @classmethod
@@ -551,7 +550,7 @@ dictionary. It does not handle layer connectivity
 A layer instance.
 
 
-<h3 id="get_config"><code>get_config</code></h3>
+<h3 id="get_config"><code><a name="get_config">get_config</a></code></h3>
 
 ``` python
 get_config()
@@ -573,7 +572,7 @@ by `Network` (one layer of abstraction above).
 Python dictionary.
 
 
-<h3 id="get_initial_state"><code>get_initial_state</code></h3>
+<h3 id="get_initial_state"><code><a name="get_initial_state">get_initial_state</a></code></h3>
 
 ``` python
 get_initial_state(
@@ -586,7 +585,7 @@ get_initial_state(
 
 
 
-<h3 id="get_input_at"><code>get_input_at</code></h3>
+<h3 id="get_input_at"><code><a name="get_input_at">get_input_at</a></code></h3>
 
 ``` python
 get_input_at(node_index)
@@ -615,7 +614,7 @@ A tensor (or list of tensors if the layer has multiple inputs).
 
 * <b>`RuntimeError`</b>: If called in Eager mode.
 
-<h3 id="get_input_mask_at"><code>get_input_mask_at</code></h3>
+<h3 id="get_input_mask_at"><code><a name="get_input_mask_at">get_input_mask_at</a></code></h3>
 
 ``` python
 get_input_mask_at(node_index)
@@ -639,7 +638,7 @@ A mask tensor
 (or list of tensors if the layer has multiple inputs).
 
 
-<h3 id="get_input_shape_at"><code>get_input_shape_at</code></h3>
+<h3 id="get_input_shape_at"><code><a name="get_input_shape_at">get_input_shape_at</a></code></h3>
 
 ``` python
 get_input_shape_at(node_index)
@@ -669,7 +668,7 @@ A shape tuple
 
 * <b>`RuntimeError`</b>: If called in Eager mode.
 
-<h3 id="get_losses_for"><code>get_losses_for</code></h3>
+<h3 id="get_losses_for"><code><a name="get_losses_for">get_losses_for</a></code></h3>
 
 ``` python
 get_losses_for(inputs)
@@ -689,7 +688,7 @@ Retrieves losses relevant to a specific set of inputs.
 List of loss tensors of the layer that depend on `inputs`.
 
 
-<h3 id="get_output_at"><code>get_output_at</code></h3>
+<h3 id="get_output_at"><code><a name="get_output_at">get_output_at</a></code></h3>
 
 ``` python
 get_output_at(node_index)
@@ -718,7 +717,7 @@ A tensor (or list of tensors if the layer has multiple outputs).
 
 * <b>`RuntimeError`</b>: If called in Eager mode.
 
-<h3 id="get_output_mask_at"><code>get_output_mask_at</code></h3>
+<h3 id="get_output_mask_at"><code><a name="get_output_mask_at">get_output_mask_at</a></code></h3>
 
 ``` python
 get_output_mask_at(node_index)
@@ -742,7 +741,7 @@ A mask tensor
 (or list of tensors if the layer has multiple outputs).
 
 
-<h3 id="get_output_shape_at"><code>get_output_shape_at</code></h3>
+<h3 id="get_output_shape_at"><code><a name="get_output_shape_at">get_output_shape_at</a></code></h3>
 
 ``` python
 get_output_shape_at(node_index)
@@ -772,7 +771,7 @@ A shape tuple
 
 * <b>`RuntimeError`</b>: If called in Eager mode.
 
-<h3 id="get_updates_for"><code>get_updates_for</code></h3>
+<h3 id="get_updates_for"><code><a name="get_updates_for">get_updates_for</a></code></h3>
 
 ``` python
 get_updates_for(inputs)
@@ -792,7 +791,7 @@ Retrieves updates relevant to a specific set of inputs.
 List of update ops of the layer that depend on `inputs`.
 
 
-<h3 id="get_weights"><code>get_weights</code></h3>
+<h3 id="get_weights"><code><a name="get_weights">get_weights</a></code></h3>
 
 ``` python
 get_weights()
@@ -806,7 +805,7 @@ Returns the current weights of the layer.
 Weights values as a list of numpy arrays.
 
 
-<h3 id="set_weights"><code>set_weights</code></h3>
+<h3 id="set_weights"><code><a name="set_weights">set_weights</a></code></h3>
 
 ``` python
 set_weights(weights)
@@ -831,7 +830,7 @@ Sets the weights of the layer, from Numpy arrays.
 * <b>`ValueError`</b>: If the provided weights list does not match the
     layer's specifications.
 
-<h3 id="with_name_scope"><code>with_name_scope</code></h3>
+<h3 id="with_name_scope"><code><a name="with_name_scope">with_name_scope</a></code></h3>
 
 ``` python
 @classmethod
@@ -874,7 +873,7 @@ mod.w
 The original method wrapped such that it enters the module's name scope.
 
 
-<h3 id="zero_state"><code>zero_state</code></h3>
+<h3 id="zero_state"><code><a name="zero_state">zero_state</a></code></h3>
 
 ``` python
 zero_state(

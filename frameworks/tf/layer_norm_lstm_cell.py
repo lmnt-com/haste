@@ -15,6 +15,7 @@
 
 """An LSTM cell compatible with the Haste LayerNormLSTM layer."""
 
+
 import tensorflow as tf
 
 from tensorflow.compat import v1
@@ -27,6 +28,14 @@ __all__ = [
 
 
 class LayerNormLSTMCell(rnn_cell.RNNCell):
+  """
+  An LSTM cell that's compatible with the Haste LayerNormLSTM layer.
+
+  This cell can be used on hardware other than GPUs and with other TensorFlow
+  classes that operate on RNN cells (e.g. `dynamic_rnn`, `BasicDecoder`, cell
+  wrappers, etc.).
+  """
+
   def __init__(self,
         num_units,
         forget_bias=1.0,

@@ -13,6 +13,9 @@
 # limitations under the License.
 # ==============================================================================
 
+"""Layer Normalized Long Short-Term Memory"""
+
+
 import haste_pytorch_lib as LIB
 import torch
 import torch.nn as nn
@@ -47,6 +50,20 @@ class LayerNormLSTMFunction(torch.autograd.Function):
 
 
 class LayerNormLSTM(nn.Module):
+  """
+  Layer Normalized Long Short-Term Memory layer.
+
+  This LSTM layer applies layer normalization to the input, recurrent, and
+  output activations of a standard LSTM. The implementation is fused and
+  GPU-accelerated. DropConnect and Zoneout regularization are built-in, and
+  this layer allows setting a non-zero initial forget gate bias.
+
+  Details about the exact function this layer implements can be found at
+  https://github.com/lmnt-com/haste/issues/1.
+
+  See [\_\_init\_\_](#__init__) and [forward](#forward) for usage.
+  """
+
   def __init__(self,
       input_size,
       hidden_size,
@@ -54,6 +71,39 @@ class LayerNormLSTM(nn.Module):
       forget_bias=1.0,
       dropout=0.0,
       zoneout=0.0):
+    """
+    Initialize the parameters of the LSTM layer.
+
+    Arguments:
+      input_size: int, the feature dimension of the input.
+      hidden_size: int, the feature dimension of the output.
+      batch_first: (optional) bool, if `True`, then the input and output
+        tensors are provided as `(batch, seq, feature)`.
+      forget_bias: (optional) float, sets the initial bias of the forget gate
+        for this LSTM cell.
+      dropout: (optional) float, sets the dropout rate for DropConnect
+        regularization on the recurrent matrix.
+      zoneout: (optional) float, sets the zoneout rate for Zoneout
+        regularization.
+
+    Variables:
+      kernel: the input projection weight matrix. Dimensions
+        (input_size, hidden_size * 4) with `i,g,f,o` gate layout. Initialized
+        with Xavier uniform initialization.
+      recurrent_kernel: the recurrent projection weight matrix. Dimensions
+        (hidden_size, hidden_size * 4) with `i,g,f,o` gate layout. Initialized
+        with orthogonal initialization.
+      bias: the projection bias vector. Dimensions (hidden_size * 4) with
+        `i,g,f,o` gate layout. The forget gate biases are initialized to
+        `forget_bias` and the rest are zeros.
+      gamma: the input and recurrent normalization gain. Dimensions
+        (2, hidden_size * 4) with `gamma[0]` specifying the input gain and
+        `gamma[1]` specifying the recurrent gain. Initialized to ones.
+      gamma_h: the output normalization gain. Dimensions (hidden_size).
+        Initialized to ones.
+      beta_h: the output normalization bias. Dimensions (hidden_size).
+        Initialized to zeros.
+    """
     super(LayerNormLSTM, self).__init__()
 
     if dropout < 0 or dropout > 1:
@@ -78,6 +128,7 @@ class LayerNormLSTM(nn.Module):
     self.reset_parameters()
 
   def reset_parameters(self):
+    """Resets this layer's parameters to their initial values."""
     hidden_size = self.hidden_size
     for i in range(4):
       nn.init.xavier_uniform_(self.kernel[:, i*hidden_size:(i+1)*hidden_size])
@@ -89,6 +140,27 @@ class LayerNormLSTM(nn.Module):
     nn.init.zeros_(self.beta_h)
 
   def forward(self, input, lengths=None):
+    """
+    Runs a forward pass of the LSTM layer.
+
+    Arguments:
+      input: Tensor, a batch of input sequences to pass through the LSTM.
+        Dimensions (seq_len, batch_size, input_size) if `batch_first` is
+        `False`, otherwise (batch_size, seq_len, input_size).
+      lengths: (optional) Tensor, list of sequence lengths for each batch
+        element. Dimension (batch_size). This argument may be omitted if
+        all batch elements are unpadded and have the same sequence length.
+
+    Returns:
+      output: Tensor, the output of the LSTM layer. Dimensions
+        (seq_len, batch_size, hidden_size) if `batch_first` is `False` (default)
+        or (batch_size, seq_len, hidden_size) if `batch_first` is `True`. Note
+        that if `lengths` was specified, the `output` tensor will not be
+        masked. It's the caller's responsibility to either not use the invalid
+        entries or to mask them out before using them.
+      (h_n, c_n): the hidden and cell states, respectively, for the last
+        sequence item. Dimensions (1, batch_size, hidden_size).
+    """
     if self.batch_first:
       input = input.permute(1, 0, 2)
 

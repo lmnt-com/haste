@@ -206,6 +206,14 @@ class LayerNormLSTMLayer(tf.Module):
 class LayerNormLSTM(tf.Module):
   """
   Layer Normalized Long Short-Term Memory layer.
+
+  This LSTM layer applies layer normalization to the input, recurrent, and
+  output activations of a standard LSTM. The implementation is fused and
+  GPU-accelerated. DropConnect and Zoneout regularization are built-in, and
+  this layer allows setting a non-zero initial forget gate bias.
+
+  Details about the exact function this layer implements can be found at
+  https://github.com/lmnt-com/haste/issues/1.
   """
 
   def __init__(self, num_units, direction='unidirectional', **kwargs):
@@ -256,7 +264,7 @@ class LayerNormLSTM(tf.Module):
     internally with the correct shape when `__call__` is invoked.
 
     Arguments:
-        shape: instance of `TensorShape`.
+      shape: instance of `TensorShape`.
     """
     if self.bwd_lstm is not None:
       with self.name_scope, v1.variable_scope(self.realname, 'lstm_cell'):

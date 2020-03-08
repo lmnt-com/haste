@@ -37,7 +37,7 @@ and is currently unsupported.
 This layer has built-in support for DropConnect and Zoneout, which are
 both techniques used to regularize RNNs.
 
-<h2 id="__init__"><code>__init__</code></h2>
+<h2 id="__init__"><code><a name="__init__">__init__</a></code></h2>
 
 ``` python
 __init__(
@@ -158,7 +158,7 @@ first).
 
 ## Methods
 
-<h3 id="__call__"><code>__call__</code></h3>
+<h3 id="__call__"><code><a name="__call__">__call__</a></code></h3>
 
 ``` python
 __call__(
@@ -193,7 +193,7 @@ A pair, `(output, state)` for unidirectional layers, or a pair
 layers.
 
 
-<h3 id="build"><code>build</code></h3>
+<h3 id="build"><code><a name="build">build</a></code></h3>
 
 ``` python
 build(shape)
@@ -209,7 +209,7 @@ internally with the correct shape when `__call__` is invoked.
 
 * <b>`shape`</b>: instance of `TensorShape`.
 
-<h3 id="with_name_scope"><code>with_name_scope</code></h3>
+<h3 id="with_name_scope"><code><a name="with_name_scope">with_name_scope</a></code></h3>
 
 ``` python
 @classmethod

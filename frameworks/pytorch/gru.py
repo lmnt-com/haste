@@ -13,10 +13,14 @@
 # limitations under the License.
 # ==============================================================================
 
+"""Gated Recurrent Unit"""
+
+
 import haste_pytorch_lib as LIB
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 
 __all__ = [
     'GRU'
@@ -47,14 +51,57 @@ class GRUFunction(torch.autograd.Function):
 
 
 class GRU(nn.Module):
+  """
+  Gated Recurrent Unit layer.
+
+  This GRU layer offers a fused, GPU-accelerated PyTorch op for inference
+  and training. There are two commonly-used variants of GRU cells. This one
+  implements 1406.1078v1 which applies the reset gate to the hidden state
+  after matrix multiplication. cuDNN also implements this variant. The other
+  variant, 1406.1078v3, applies the reset gate before matrix multiplication
+  and is currently unsupported.
+
+  This layer has built-in support for DropConnect and Zoneout, which are
+  both techniques used to regularize RNNs.
+
+  See [\_\_init\_\_](#__init__) and [forward](#forward) for usage.
+  """
+
   def __init__(self,
       input_size,
       hidden_size,
       batch_first=False,
       dropout=0.0,
       zoneout=0.0):
+    """
+    Initialize the parameters of the GRU layer.
+
+    Arguments:
+      input_size: int, the feature dimension of the input.
+      hidden_size: int, the feature dimension of the output.
+      batch_first: (optional) bool, if `True`, then the input and output
+        tensors are provided as `(batch, seq, feature)`.
+      dropout: (optional) float, sets the dropout rate for DropConnect
+        regularization on the recurrent matrix.
+      zoneout: (optional) float, sets the zoneout rate for Zoneout
+        regularization.
+
+    Variables:
+      kernel: the input projection weight matrix. Dimensions
+        (input_size, hidden_size * 3) with `z,r,h` gate layout. Initialized
+        with Xavier uniform initialization.
+      recurrent_kernel: the recurrent projection weight matrix. Dimensions
+        (hidden_size, hidden_size * 3) with `z,r,h` gate layout. Initialized
+        with orthogonal initialization.
+      bias: the input projection bias vector. Dimensions (hidden_size * 3) with
+        `z,r,h` gate layout. Initialized to zeros.
+      recurrent_bias: the recurrent projection bias vector. Dimensions
+        (hidden_size * 3) with `z,r,h` gate layout. Initialized to zeros.
+    """
     super(GRU, self).__init__()
 
+    if dropout < 0 or dropout > 1:
+      raise ValueError('GRU: dropout must be in [0.0, 1.0]')
     if zoneout < 0 or zoneout > 1:
       raise ValueError('GRU: zoneout must be in [0.0, 1.0]')
 
@@ -72,6 +119,7 @@ class GRU(nn.Module):
     self.reset_parameters()
 
   def reset_parameters(self):
+    """Resets this layer's parameters to their initial values."""
     hidden_size = self.hidden_size
     for i in range(3):
       nn.init.xavier_uniform_(self.kernel[:, i*hidden_size:(i+1)*hidden_size])
@@ -80,6 +128,27 @@ class GRU(nn.Module):
     nn.init.zeros_(self.recurrent_bias)
 
   def forward(self, input, lengths=None):
+    """
+    Runs a forward pass of the GRU layer.
+
+    Arguments:
+      input: Tensor, a batch of input sequences to pass through the GRU.
+        Dimensions (seq_len, batch_size, input_size) if `batch_first` is
+        `False`, otherwise (batch_size, seq_len, input_size).
+      lengths: (optional) Tensor, list of sequence lengths for each batch
+        element. Dimension (batch_size). This argument may be omitted if
+        all batch elements are unpadded and have the same sequence length.
+
+    Returns:
+      output: Tensor, the output of the GRU layer. Dimensions
+        (seq_len, batch_size, hidden_size) if `batch_first` is `False` (default)
+        or (batch_size, seq_len, hidden_size) if `batch_first` is `True`. Note
+        that if `lengths` was specified, the `output` tensor will not be
+        masked. It's the caller's responsibility to either not use the invalid
+        entries or to mask them out before using them.
+      h_n: the hidden state for the last sequence item. Dimensions
+        (1, batch_size, hidden_size).
+    """
     if self.batch_first:
       input = input.permute(1, 0, 2)
 

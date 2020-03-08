@@ -1,5 +1,5 @@
 <div itemscope itemtype="http://developers.google.com/ReferenceObject">
-<meta itemprop="name" content="haste_tf.LSTM" />
+<meta itemprop="name" content="haste_tf.LayerNormLSTM" />
 <meta itemprop="path" content="Stable" />
 <meta itemprop="property" content="name"/>
 <meta itemprop="property" content="name_scope"/>
@@ -14,28 +14,26 @@
 <meta itemprop="property" content="with_name_scope"/>
 </div>
 
-# haste_tf.LSTM
+# haste_tf.LayerNormLSTM
 
 <!-- Insert buttons and diff -->
 
 
-## Class `LSTM`
+## Class `LayerNormLSTM`
 
-Long Short-Term Memory layer.
+Layer Normalized Long Short-Term Memory layer.
 
 
 
 <!-- Placeholder for "Used in" -->
 
-This LSTM layer offers a fused, GPU-accelerated TensorFlow op for inference
-and training. Its weights and variables are compatible with `BasicLSTMCell`,
-`LSTMCell`, and `LSTMBlockCell` by default, and is able to load weights
-from `tf.contrib.cudnn_rnn.CudnnLSTM` when `cudnn_compat=True` is specified.
-
-Although this implementation is comparable in performance to cuDNN's LSTM,
-it offers additional options not typically found in other high-performance
-implementations. DropConnect and Zoneout regularization are built-in, and
+This LSTM layer applies layer normalization to the input, recurrent, and
+output activations of a standard LSTM. The implementation is fused and
+GPU-accelerated. DropConnect and Zoneout regularization are built-in, and
 this layer allows setting a non-zero initial forget gate bias.
+
+Details about the exact function this layer implements can be found at
+https://github.com/lmnt-com/haste/issues/1.
 
 <h2 id="__init__"><code><a name="__init__">__init__</a></code></h2>
 
@@ -77,11 +75,6 @@ Initialize the parameters of the LSTM layer.
   regularization. Defaults to 0.
 * <b>`dtype`</b>: (optional) the data type for this layer. Defaults to `tf.float32`.
 * <b>`name`</b>: (optional) string, the name for this layer.
-* <b>`cudnn_compat`</b>: (optional) bool, if `True`, the variables created by this
-  layer are compatible with `tf.contrib.cudnn_rnn.CudnnLSTM`. Note that
-  this should only be set if you're restoring variables from a cuDNN
-  model. It's currently not possible to train a model with
-  `cudnn_compat=True` and restore it with CudnnLSTM. Defaults to `False`.
 
 
 

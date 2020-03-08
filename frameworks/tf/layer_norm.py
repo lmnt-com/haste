@@ -13,7 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 
-# TODO: module-level docstring
+"""Layer Normalization"""
+
 
 import pkg_resources
 import tensorflow as tf
@@ -40,7 +41,20 @@ def layer_norm_gradient(op, *grads):
 
 
 class LayerNorm(tf.Module):
+  """
+  Layer normalization layer.
+
+  This class exposes a fused and GPU-accelerated implementation of layer
+  normalization as described by [Ba et al.](https://arxiv.org/abs/1607.06450)
+  """
+
   def __init__(self, name=None):
+    """
+    Initialize the parameters of the layer normalization layer.
+
+    Arguments:
+      name: (optional) string, the name for this layer.
+    """
     super(LayerNorm, self).__init__(name)
     self.realname = name
     self.gamma = None
@@ -48,6 +62,15 @@ class LayerNorm(tf.Module):
     self.built = False
 
   def build(self, shape):
+    """
+    Creates the variables of the layer.
+
+    Calling this method is optional for users of the LayerNorm class. It is
+    called internally with the correct shape when `__call__` is invoked.
+
+    Arguments:
+      shape: instance of `TensorShape`.
+    """
     if self.built:
       return
     hidden_size = int(shape[-1])
@@ -57,6 +80,15 @@ class LayerNorm(tf.Module):
     self.built = True
 
   def __call__(self, x):
+    """
+    Runs the layer.
+
+    Arguments:
+      x: Tensor, a rank R tensor.
+
+    Returns:
+      y: Tensor, a rank R tensor with the last dimension normalized.
+    """
     self.build(x.shape)
     y, _ = LIB.haste_layer_norm(x, self.gamma, self.beta)
     return y
