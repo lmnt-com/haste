@@ -19,7 +19,7 @@ from setuptools import setup
 from setuptools.dist import Distribution
 
 
-VERSION = '0.2.0'
+VERSION = '0.3.0'
 DESCRIPTION = 'Haste: a fast, simple, and open RNN library.'
 AUTHOR = 'LMNT, Inc.'
 AUTHOR_EMAIL = 'haste@lmnt.com'
