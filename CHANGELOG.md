@@ -1,5 +1,14 @@
 # ChangeLog
 
+## 0.3.0 (2020-03-09)
+### Added
+- PyTorch support.
+- New layer normalized LSTM layer (`LayerNormLSTM`).
+- New fused layer normalization layer.
+
+### Fixed
+- Occasional uninitialized memory use in TensorFlow LSTM implementation.
+
 ## 0.2.0 (2020-02-12)
 ### Added
 - New time-fused API for LSTM (`lstm::ForwardPass::Run`, `lstm::BackwardPass::Run`).
