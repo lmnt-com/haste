@@ -58,7 +58,9 @@ class LSTM(nn.Module):
   high-performance implementations. DropConnect and Zoneout regularization are
   built-in, and this layer allows setting a non-zero initial forget gate bias.
 
-  See [\_\_init\_\_](#__init__) and [forward](#forward) for usage.
+  See [\_\_init\_\_](#__init__) and [forward](#forward) for general usage.
+  See [from_native_weights](#from_native_weights) and
+  [to_native_weights](#to_native_weights) for compatibility with PyTorch LSTMs.
   """
 
   def __init__(self,
@@ -114,6 +116,50 @@ class LSTM(nn.Module):
     self.bias = nn.Parameter(torch.empty(hidden_size * 4, device=gpu))
     self.reset_parameters()
 
+  def to_native_weights(self):
+    """
+    Converts Haste LSTM weights to native PyTorch LSTM weights.
+
+    Returns:
+      weight_ih_l0: Parameter, the input-hidden weights of the LSTM layer.
+      weight_hh_l0: Parameter, the hidden-hidden weights of the LSTM layer.
+      bias_ih_l0: Parameter, the input-hidden bias of the LSTM layer.
+      bias_hh_l0: Parameter, the hidden-hidden bias of the LSTM layer.
+    """
+    def reorder_weights(w):
+      i, g, f, o = torch.chunk(w, 4, dim=-1)
+      return torch.cat([i, f, g, o], dim=-1)
+    kernel = reorder_weights(self.kernel).permute(1, 0).contiguous()
+    recurrent_kernel = reorder_weights(self.recurrent_kernel).permute(1, 0).contiguous()
+    half_bias = reorder_weights(self.bias) / 2.0
+
+    kernel = torch.nn.Parameter(kernel)
+    recurrent_kernel = torch.nn.Parameter(recurrent_kernel)
+    bias1 = torch.nn.Parameter(half_bias)
+    bias2 = torch.nn.Parameter(half_bias.clone())
+    return kernel, recurrent_kernel, bias1, bias2
+
+  def from_native_weights(self, weight_ih_l0, weight_hh_l0, bias_ih_l0, bias_hh_l0):
+    """
+    Copies and converts the provided PyTorch LSTM weights into this layer.
+
+    Arguments:
+      weight_ih_l0: Parameter, the input-hidden weights of the PyTorch LSTM layer.
+      weight_hh_l0: Parameter, the hidden-hidden weights of the PyTorch LSTM layer.
+      bias_ih_l0: Parameter, the input-hidden bias of the PyTorch LSTM layer.
+      bias_hh_l0: Parameter, the hidden-hidden bias of the PyTorch LSTM layer.
+    """
+    def reorder_weights(w):
+      i, f, g, o = torch.chunk(w, 4, dim=-1)
+      return torch.cat([i, g, f, o], dim=-1)
+    kernel = reorder_weights(weight_ih_l0.permute(1, 0)).contiguous().cuda()
+    recurrent_kernel = reorder_weights(weight_hh_l0.permute(1, 0)).contiguous().cuda()
+    bias = reorder_weights(bias_ih_l0 + bias_hh_l0).contiguous().cuda()
+
+    self.kernel = nn.Parameter(kernel)
+    self.recurrent_kernel = nn.Parameter(recurrent_kernel)
+    self.bias = nn.Parameter(bias)
+
   def reset_parameters(self):
     """Resets this layer's parameters to their initial values."""
     hidden_size = self.hidden_size
@@ -125,7 +171,6 @@ class LSTM(nn.Module):
 
   def forward(self, input, lengths=None):
     """
-    <a name="forward"></a>
     Runs a forward pass of the LSTM layer.
 
     Arguments:

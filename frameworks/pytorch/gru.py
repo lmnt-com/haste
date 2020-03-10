@@ -65,6 +65,8 @@ class GRU(nn.Module):
   both techniques used to regularize RNNs.
 
   See [\_\_init\_\_](#__init__) and [forward](#forward) for usage.
+  See [from_native_weights](#from_native_weights) and
+  [to_native_weights](#to_native_weights) for compatibility with PyTorch GRUs.
   """
 
   def __init__(self,
@@ -117,6 +119,55 @@ class GRU(nn.Module):
     self.bias = nn.Parameter(torch.empty(hidden_size * 3, device=gpu))
     self.recurrent_bias = nn.Parameter(torch.empty(hidden_size * 3, device=gpu))
     self.reset_parameters()
+
+  def to_native_weights(self):
+    """
+    Converts Haste GRU weights to native PyTorch GRU weights.
+
+    Returns:
+      weight_ih_l0: Parameter, the input-hidden weights of the GRU layer.
+      weight_hh_l0: Parameter, the hidden-hidden weights of the GRU layer.
+      bias_ih_l0: Parameter, the input-hidden bias of the GRU layer.
+      bias_hh_l0: Parameter, the hidden-hidden bias of the GRU layer.
+    """
+    def reorder_weights(w):
+      z, r, n = torch.chunk(w, 3, dim=-1)
+      return torch.cat([r, z, n], dim=-1)
+
+    kernel = reorder_weights(self.kernel).permute(1, 0).contiguous()
+    recurrent_kernel = reorder_weights(self.recurrent_kernel).permute(1, 0).contiguous()
+    bias1 = reorder_weights(self.bias).contiguous()
+    bias2 = reorder_weights(self.recurrent_bias).contiguous()
+
+    kernel = torch.nn.Parameter(kernel)
+    recurrent_kernel = torch.nn.Parameter(recurrent_kernel)
+    bias1 = torch.nn.Parameter(bias1)
+    bias2 = torch.nn.Parameter(bias2)
+    return kernel, recurrent_kernel, bias1, bias2
+
+  def from_native_weights(self, weight_ih_l0, weight_hh_l0, bias_ih_l0, bias_hh_l0):
+    """
+    Copies and converts the provided PyTorch GRU weights into this layer.
+
+    Arguments:
+      weight_ih_l0: Parameter, the input-hidden weights of the PyTorch GRU layer.
+      weight_hh_l0: Parameter, the hidden-hidden weights of the PyTorch GRU layer.
+      bias_ih_l0: Parameter, the input-hidden bias of the PyTorch GRU layer.
+      bias_hh_l0: Parameter, the hidden-hidden bias of the PyTorch GRU layer.
+    """
+    def reorder_weights(w):
+      r, z, n = torch.chunk(w, 3, axis=-1)
+      return torch.cat([z, r, n], dim=-1)
+
+    kernel = reorder_weights(weight_ih_l0.permute(1, 0)).contiguous().cuda()
+    recurrent_kernel = reorder_weights(weight_hh_l0.permute(1, 0)).contiguous().cuda()
+    bias = reorder_weights(bias_ih_l0).contiguous().cuda()
+    recurrent_bias = reorder_weights(bias_hh_l0).contiguous().cuda()
+
+    self.kernel = nn.Parameter(kernel)
+    self.recurrent_kernel = nn.Parameter(recurrent_kernel)
+    self.bias = nn.Parameter(bias)
+    self.recurrent_bias = nn.Parameter(recurrent_bias)
 
   def reset_parameters(self):
     """Resets this layer's parameters to their initial values."""

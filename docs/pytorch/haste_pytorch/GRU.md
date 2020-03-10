@@ -14,6 +14,7 @@
 <meta itemprop="property" content="extra_repr"/>
 <meta itemprop="property" content="float"/>
 <meta itemprop="property" content="forward"/>
+<meta itemprop="property" content="from_native_weights"/>
 <meta itemprop="property" content="half"/>
 <meta itemprop="property" content="load_state_dict"/>
 <meta itemprop="property" content="modules"/>
@@ -32,6 +33,7 @@
 <meta itemprop="property" content="share_memory"/>
 <meta itemprop="property" content="state_dict"/>
 <meta itemprop="property" content="to"/>
+<meta itemprop="property" content="to_native_weights"/>
 <meta itemprop="property" content="train"/>
 <meta itemprop="property" content="type"/>
 <meta itemprop="property" content="zero_grad"/>
@@ -61,6 +63,8 @@ This layer has built-in support for DropConnect and Zoneout, which are
 both techniques used to regularize RNNs.
 
 See [\_\_init\_\_](#__init__) and [forward](#forward) for usage.
+See [from_native_weights](#from_native_weights) and
+[to_native_weights](#to_native_weights) for compatibility with PyTorch GRUs.
 
 <h2 id="__init__"><code><a name="__init__">__init__</a></code></h2>
 
@@ -366,6 +370,28 @@ Runs a forward pass of the GRU layer.
   entries or to mask them out before using them.
 * <b>`h_n`</b>: the hidden state for the last sequence item. Dimensions
   (1, batch_size, hidden_size).
+
+<h3 id="from_native_weights"><code><a name="from_native_weights">from_native_weights</a></code></h3>
+
+``` python
+from_native_weights(
+    weight_ih_l0,
+    weight_hh_l0,
+    bias_ih_l0,
+    bias_hh_l0
+)
+```
+
+Copies and converts the provided PyTorch GRU weights into this layer.
+
+
+#### Arguments:
+
+
+* <b>`weight_ih_l0`</b>: Parameter, the input-hidden weights of the PyTorch GRU layer.
+* <b>`weight_hh_l0`</b>: Parameter, the hidden-hidden weights of the PyTorch GRU layer.
+* <b>`bias_ih_l0`</b>: Parameter, the input-hidden bias of the PyTorch GRU layer.
+* <b>`bias_hh_l0`</b>: Parameter, the hidden-hidden bias of the PyTorch GRU layer.
 
 <h3 id="half"><code><a name="half">half</a></code></h3>
 
@@ -892,6 +918,23 @@ Example::
     tensor([[ 0.1914, -0.3420],
             [-0.5112, -0.2324]], dtype=torch.float16)
     ```
+
+<h3 id="to_native_weights"><code><a name="to_native_weights">to_native_weights</a></code></h3>
+
+``` python
+to_native_weights()
+```
+
+Converts Haste GRU weights to native PyTorch GRU weights.
+
+
+#### Returns:
+
+
+* <b>`weight_ih_l0`</b>: Parameter, the input-hidden weights of the GRU layer.
+* <b>`weight_hh_l0`</b>: Parameter, the hidden-hidden weights of the GRU layer.
+* <b>`bias_ih_l0`</b>: Parameter, the input-hidden bias of the GRU layer.
+* <b>`bias_hh_l0`</b>: Parameter, the hidden-hidden bias of the GRU layer.
 
 <h3 id="train"><code><a name="train">train</a></code></h3>
 
