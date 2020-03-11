@@ -28,5 +28,5 @@ class OpKernelContext;
                             .TypeConstraint<T>("R"), \
                           NAME##Op<T>)
 
-cublasHandle_t GetCublasHandle();
+cublasHandle_t GetCublasHandle(tensorflow::OpKernelContext* context);
 const cudaStream_t& GetCudaStream(tensorflow::OpKernelContext* context);

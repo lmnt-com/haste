@@ -125,7 +125,7 @@ struct HasteGruOp : public OpKernel {
         batch_size,
         input_size,
         hidden_size,
-        GetCublasHandle());
+        GetCublasHandle(context));
 
     Tensor h = output->SubSlice(0);
     for (int64 i = 0; i < time_steps; ++i) {
@@ -287,7 +287,7 @@ struct HasteGruGradOp : public OpKernel {
         batch_size,
         input_size,
         hidden_size,
-        GetCublasHandle());
+        GetCublasHandle(context));
 
     for (int64 i = time_steps - 1; i >= 0; --i) {
       Tensor x = input.SubSlice(i);

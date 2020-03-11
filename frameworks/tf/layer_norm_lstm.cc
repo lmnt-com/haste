@@ -178,7 +178,7 @@ struct HasteLayerNormLstmOp : public OpKernel {
         batch_size,
         input_size,
         hidden_size,
-        GetCublasHandle());
+        GetCublasHandle(context));
 
     lstm.Run(
         time_steps,
@@ -411,7 +411,7 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
         batch_size,
         input_size,
         hidden_size,
-        GetCublasHandle());
+        GetCublasHandle(context));
 
     lstm.Run(
         time_steps,

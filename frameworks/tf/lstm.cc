@@ -133,7 +133,7 @@ struct HasteLstmOp : public OpKernel {
         batch_size,
         input_size,
         hidden_size,
-        GetCublasHandle());
+        GetCublasHandle(context));
 
     forward.Run(
         time_steps,
@@ -274,7 +274,7 @@ struct HasteLstmGradOp : public OpKernel {
         batch_size,
         input_size,
         hidden_size,
-        GetCublasHandle());
+        GetCublasHandle(context));
 
     backward.Run(
         time_steps,

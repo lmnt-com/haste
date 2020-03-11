@@ -13,7 +13,10 @@
 // limitations under the License.
 // ==============================================================================
 
-#include <vector>
+#include <iterator>
+#include <mutex>
+#include <thread>
+#include <unordered_map>
 
 #include "support.h"
 #include "tensorflow/core/framework/op_kernel.h"
@@ -21,34 +24,22 @@
 #include "tensorflow/stream_executor/stream.h"
 
 // LOL.
-struct CublasHandleContainer {
-  CublasHandleContainer() {
-    int count;
-    int current_device;
-    cudaGetDevice(&current_device);
-    cudaGetDeviceCount(&count);
-    for (int i = 0; i < count; ++i) {
-      cublasHandle_t handle;
-      cudaSetDevice(i);
-      cublasCreate(&handle);
-      handles.push_back(handle);
-    }
-    cudaSetDevice(current_device);
+cublasHandle_t GetCublasHandle(tensorflow::OpKernelContext* context) {
+  static std::unordered_map<std::thread::id, cublasHandle_t> handle_map;
+  static std::mutex mutex;
+
+  std::lock_guard<std::mutex> lock(mutex);
+  std::thread::id tid = std::this_thread::get_id();
+  cudaStream_t stream = GetCudaStream(context);
+  auto i = handle_map.find(tid);
+  if (i == std::end(handle_map)) {
+    cublasHandle_t handle;
+    cublasCreate(&handle);
+    cublasSetStream(handle, stream);
+    i = handle_map.insert(std::make_pair(tid, handle)).first;
   }
 
-  ~CublasHandleContainer() {
-    for (auto h : handles)
-      cublasDestroy(h);
-  }
-
-  std::vector<cublasHandle_t> handles;
-};
-
-cublasHandle_t GetCublasHandle() {
-  static CublasHandleContainer all_handles;
-  int device;
-  cudaGetDevice(&device);
-  return all_handles.handles[device];
+  return i->second;
 }
 
 const cudaStream_t& GetCudaStream(tensorflow::OpKernelContext* context) {
