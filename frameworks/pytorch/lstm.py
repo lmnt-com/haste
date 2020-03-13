@@ -27,6 +27,43 @@ __all__ = [
 ]
 
 
+#@torch.jit.script
+def LSTMScript(
+    training: bool,
+    zoneout_prob: float,
+    input,
+    kernel,
+    recurrent_kernel,
+    bias,
+    zoneout_mask):
+  time_steps = input.shape[0]
+  batch_size = input.shape[1]
+  hidden_size = recurrent_kernel.shape[0]
+
+  dtype, device = input.dtype, input.device
+
+  h = [torch.zeros([batch_size, hidden_size], dtype=dtype, device=device)]
+  c = [torch.zeros([batch_size, hidden_size], dtype=dtype, device=device)]
+  Wx = input @ kernel
+  for t in range(time_steps):
+    v = h[t] @ recurrent_kernel + Wx[t] + bias
+    i, g, f, o = torch.chunk(v, 4, 1)
+    i = torch.sigmoid(i)
+    g = torch.tanh(g)
+    f = torch.sigmoid(f)
+    o = torch.sigmoid(o)
+    c.append(f * c[t] + i * g)
+    h.append(o * torch.tanh(c[-1]))
+    if zoneout_prob:
+      if training:
+        h[-1] = (h[-1] - h[-2]) * zoneout_mask[t] + h[-2]
+      else:
+        h[-1] = zoneout_prob * h[-2] + (1 - zoneout_prob) * h[-1]
+  h = torch.stack(h)
+  c = torch.stack(c)
+  return h, c
+
+
 class LSTMFunction(torch.autograd.Function):
   @staticmethod
   def forward(ctx, training, zoneout_prob, *inputs):
@@ -47,6 +84,7 @@ class LSTMFunction(torch.autograd.Function):
     saved[2] = saved[2].permute(1, 0).contiguous()
     grads = LIB.lstm_backward(*saved, grad_h.contiguous(), grad_c.contiguous())
     return (None, None, *grads, None)
+
 
 class LSTM(nn.Module):
   """
@@ -204,14 +242,8 @@ class LSTM(nn.Module):
       zoneout_mask.bernoulli_(1.0 - self.zoneout)
     else:
       zoneout_mask = torch.empty(0, dtype=input.dtype, device=input.device)
-    h, c = LSTMFunction.apply(
-        self.training,
-        self.zoneout,
-        input.contiguous(),
-        self.kernel.contiguous(),
-        F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
-        self.bias.contiguous(),
-        zoneout_mask.contiguous())
+
+    h, c = self._impl(input, zoneout_mask)
 
     if lengths is not None:
       cols = range(h.size(1))
@@ -224,3 +256,28 @@ class LSTM(nn.Module):
       output = output.permute(1, 0, 2)
 
     return output, state
+
+  def _impl(self, input, zoneout_mask):
+    tensors = [input, self.kernel, self.recurrent_kernel, self.bias]
+    is_cuda = [tensor.is_cuda for tensor in tensors]
+    if any(is_cuda) and not all(is_cuda):
+      raise ValueError('LSTM tensors should all be CUDA tensors or none should be CUDA tensors')
+
+    if all(is_cuda):
+      return LSTMFunction.apply(
+          self.training,
+          self.zoneout,
+          input.contiguous(),
+          self.kernel.contiguous(),
+          F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
+          self.bias.contiguous(),
+          zoneout_mask.contiguous())
+    else:
+      return LSTMScript(
+          self.training,
+          self.zoneout,
+          input.contiguous(),
+          self.kernel.contiguous(),
+          F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
+          self.bias.contiguous(),
+          zoneout_mask.contiguous())

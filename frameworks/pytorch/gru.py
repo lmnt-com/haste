@@ -27,6 +27,44 @@ __all__ = [
 ]
 
 
+#@torch.jit.script
+def GRUScript(
+    training: bool,
+    zoneout_prob: float,
+    input,
+    kernel,
+    recurrent_kernel,
+    bias,
+    recurrent_bias,
+    zoneout_mask):
+  time_steps = input.shape[0]
+  batch_size = input.shape[1]
+  hidden_size = recurrent_kernel.shape[0]
+
+  dtype, device = input.dtype, input.device
+
+  h = [torch.zeros([batch_size, hidden_size], dtype=dtype, device=device)]
+  Wx = input @ kernel + bias
+  for t in range(time_steps):
+    Rh = h[t] @ recurrent_kernel + recurrent_bias
+    vx = torch.chunk(Wx[t], 3, 1)
+    vh = torch.chunk(Rh, 3, 1)
+
+    z = torch.sigmoid(vx[0] + vh[0])
+    r = torch.sigmoid(vx[1] + vh[1])
+    g = torch.tanh(vx[2] + r * vh[2])
+
+    h.append(z * h[t] + (1 - z) * g)
+    if zoneout_prob:
+      if training:
+        h[-1] = (h[-1] - h[-2]) * zoneout_mask[t] + h[-2]
+      else:
+        h[-1] = zoneout_prob * h[-2] + (1 - zoneout_prob) * h[-1]
+
+  h = torch.stack(h[1:])
+  return h
+
+
 class GRUFunction(torch.autograd.Function):
   @staticmethod
   def forward(ctx, training, zoneout_prob, *inputs):
@@ -213,15 +251,8 @@ class GRU(nn.Module):
       zoneout_mask.bernoulli_(1.0 - self.zoneout)
     else:
       zoneout_mask = torch.empty(0, 0, 0, dtype=input.dtype, device=input.device)
-    h = GRUFunction.apply(
-        self.training,
-        self.zoneout,
-        input.contiguous(),
-        self.kernel.contiguous(),
-        F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
-        self.bias.contiguous(),
-        self.recurrent_bias.contiguous(),
-        zoneout_mask.contiguous())
+
+    h = self._impl(input, zoneout_mask)
 
     if lengths is not None:
       cols = range(h.size(1))
@@ -234,3 +265,30 @@ class GRU(nn.Module):
       output = output.permute(1, 0, 2)
 
     return output, state
+
+  def _impl(self, input, zoneout_mask):
+    tensors = [input, self.kernel, self.recurrent_kernel, self.bias]
+    is_cuda = [tensor.is_cuda for tensor in tensors]
+    if any(is_cuda) and not all(is_cuda):
+      raise ValueError('GRU tensors should all be CUDA tensors or none should be CUDA tensors')
+
+    if all(is_cuda):
+      return GRUFunction.apply(
+          self.training,
+          self.zoneout,
+          input.contiguous(),
+          self.kernel.contiguous(),
+          F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
+          self.bias.contiguous(),
+          self.recurrent_bias.contiguous(),
+          zoneout_mask.contiguous())
+    else:
+      return GRUScript(
+          self.training,
+          self.zoneout,
+          input.contiguous(),
+          self.kernel.contiguous(),
+          F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
+          self.bias.contiguous(),
+          self.recurrent_bias.contiguous(),
+          zoneout_mask.contiguous())

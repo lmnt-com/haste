@@ -27,6 +27,46 @@ __all__ = [
 ]
 
 
+#@torch.jit.script
+def LayerNormLSTMScript(
+    training: bool,
+    zoneout_prob: float,
+    input,
+    kernel,
+    recurrent_kernel,
+    bias,
+    gamma,
+    gamma_h,
+    beta_h,
+    zoneout_mask):
+  time_steps = input.shape[0]
+  batch_size = input.shape[1]
+  hidden_size = recurrent_kernel.shape[0]
+
+  dtype, device = input.dtype, input.device
+
+  h = [torch.zeros([batch_size, hidden_size], dtype=dtype, device=device)]
+  c = [torch.zeros([batch_size, hidden_size], dtype=dtype, device=device)]
+  Wx = F.layer_norm(input @ kernel, (hidden_size * 4,), weight=gamma[0])
+  for t in range(time_steps):
+    v = F.layer_norm(h[t] @ recurrent_kernel, (hidden_size * 4,), weight=gamma[1]) + Wx[t] + bias
+    i, g, f, o = torch.chunk(v, 4, 1)
+    i = torch.sigmoid(i)
+    g = torch.tanh(g)
+    f = torch.sigmoid(f)
+    o = torch.sigmoid(o)
+    c.append(f * c[t] + i * g)
+    h.append(o * torch.tanh(F.layer_norm(c[-1], (hidden_size,), weight=gamma_h, bias=beta_h)))
+    if zoneout_prob:
+      if training:
+        h[-1] = (h[-1] - h[-2]) * zoneout_mask[t] + h[-2]
+      else:
+        h[-1] = zoneout_prob * h[-2] + (1 - zoneout_prob) * h[-1]
+  h = torch.stack(h)
+  c = torch.stack(c)
+  return h, c
+
+
 class LayerNormLSTMFunction(torch.autograd.Function):
   @staticmethod
   def forward(ctx, training, zoneout_prob, *inputs):
@@ -174,17 +214,8 @@ class LayerNormLSTM(nn.Module):
       zoneout_mask.bernoulli_(1.0 - self.zoneout)
     else:
       zoneout_mask = torch.empty(0, dtype=input.dtype, device=input.device)
-    h, c = LayerNormLSTMFunction.apply(
-        self.training,
-        self.zoneout,
-        input.contiguous(),
-        self.kernel.contiguous(),
-        F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
-        self.bias.contiguous(),
-        self.gamma.contiguous(),
-        self.gamma_h.contiguous(),
-        self.beta_h.contiguous(),
-        zoneout_mask.contiguous())
+
+    h, c = self._impl(input, zoneout_mask)
 
     if lengths is not None:
       cols = range(h.size(1))
@@ -197,3 +228,34 @@ class LayerNormLSTM(nn.Module):
       output = output.permute(1, 0, 2)
 
     return output, state
+
+  def _impl(self, input, zoneout_mask):
+    tensors = [input, self.kernel, self.recurrent_kernel, self.bias]
+    is_cuda = [tensor.is_cuda for tensor in tensors]
+    if any(is_cuda) and not all(is_cuda):
+      raise ValueError('GRU tensors should all be CUDA tensors or none should be CUDA tensors')
+
+    if all(is_cuda):
+      return LayerNormLSTMFunction.apply(
+          self.training,
+          self.zoneout,
+          input.contiguous(),
+          self.kernel.contiguous(),
+          F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
+          self.bias.contiguous(),
+          self.gamma.contiguous(),
+          self.gamma_h.contiguous(),
+          self.beta_h.contiguous(),
+          zoneout_mask.contiguous())
+    else:
+      return LayerNormLSTMScript(
+          self.training,
+          self.zoneout,
+          input.contiguous(),
+          self.kernel.contiguous(),
+          F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
+          self.bias.contiguous(),
+          self.gamma.contiguous(),
+          self.gamma_h.contiguous(),
+          self.beta_h.contiguous(),
+          zoneout_mask.contiguous())
