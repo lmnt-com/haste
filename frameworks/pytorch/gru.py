@@ -32,6 +32,7 @@ def GRUScript(
     training: bool,
     zoneout_prob: float,
     input,
+    h0,
     kernel,
     recurrent_kernel,
     bias,
@@ -43,7 +44,7 @@ def GRUScript(
 
   dtype, device = input.dtype, input.device
 
-  h = [torch.zeros([batch_size, hidden_size], dtype=dtype, device=device)]
+  h = [h0]
   Wx = input @ kernel + bias
   for t in range(time_steps):
     Rh = h[t] @ recurrent_kernel + recurrent_bias
@@ -61,7 +62,7 @@ def GRUScript(
       else:
         h[-1] = zoneout_prob * h[-2] + (1 - zoneout_prob) * h[-1]
 
-  h = torch.stack(h[1:])
+  h = torch.stack(h)
   return h
 
 
@@ -69,7 +70,7 @@ class GRUFunction(torch.autograd.Function):
   @staticmethod
   def forward(ctx, training, zoneout_prob, *inputs):
     h, cache = LIB.gru_forward(training, zoneout_prob, *inputs)
-    ctx.save_for_backward(*inputs, h, cache)
+    ctx.save_for_backward(inputs[0], *inputs[2:], h, cache)
     ctx.mark_non_differentiable(inputs[-1])
     ctx.training = training
     return h
@@ -216,7 +217,7 @@ class GRU(nn.Module):
     nn.init.zeros_(self.bias)
     nn.init.zeros_(self.recurrent_bias)
 
-  def forward(self, input, lengths=None):
+  def forward(self, input, state=None, lengths=None):
     """
     Runs a forward pass of the GRU layer.
 
@@ -252,7 +253,14 @@ class GRU(nn.Module):
     else:
       zoneout_mask = torch.empty(0, 0, 0, dtype=input.dtype, device=input.device)
 
-    h = self._impl(input, zoneout_mask)
+    if state is None:
+      state = torch.zeros(input.shape[1], self.hidden_size, dtype=input.dtype, device=input.device)
+    elif state.shape[0] != 1:
+      raise ValueError('initial state for GRU must have leading dimension of 1')
+    else:
+      state = state[0]
+
+    h = self._impl(input, state, zoneout_mask)
 
     if lengths is not None:
       cols = range(h.size(1))
@@ -260,13 +268,13 @@ class GRU(nn.Module):
     else:
       state = h[-1].unsqueeze(0)
 
-    output = h
+    output = h[1:]
     if self.batch_first:
       output = output.permute(1, 0, 2)
 
     return output, state
 
-  def _impl(self, input, zoneout_mask):
+  def _impl(self, input, state, zoneout_mask):
     tensors = [input, self.kernel, self.recurrent_kernel, self.bias]
     is_cuda = [tensor.is_cuda for tensor in tensors]
     if any(is_cuda) and not all(is_cuda):
@@ -277,6 +285,7 @@ class GRU(nn.Module):
           self.training,
           self.zoneout,
           input.contiguous(),
+          state.contiguous(),
           self.kernel.contiguous(),
           F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
           self.bias.contiguous(),
@@ -287,6 +296,7 @@ class GRU(nn.Module):
           self.training,
           self.zoneout,
           input.contiguous(),
+          state.contiguous(),
           self.kernel.contiguous(),
           F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
           self.bias.contiguous(),

@@ -32,6 +32,8 @@ def LSTMScript(
     training: bool,
     zoneout_prob: float,
     input,
+    h0,
+    c0,
     kernel,
     recurrent_kernel,
     bias,
@@ -42,8 +44,8 @@ def LSTMScript(
 
   dtype, device = input.dtype, input.device
 
-  h = [torch.zeros([batch_size, hidden_size], dtype=dtype, device=device)]
-  c = [torch.zeros([batch_size, hidden_size], dtype=dtype, device=device)]
+  h = [h0]
+  c = [c0]
   Wx = input @ kernel
   for t in range(time_steps):
     v = h[t] @ recurrent_kernel + Wx[t] + bias
@@ -68,7 +70,7 @@ class LSTMFunction(torch.autograd.Function):
   @staticmethod
   def forward(ctx, training, zoneout_prob, *inputs):
     h, c, cache = LIB.lstm_forward(training, zoneout_prob, *inputs)
-    ctx.save_for_backward(*inputs, h, c, cache)
+    ctx.save_for_backward(inputs[0], *inputs[3:], h, c, cache)
     ctx.mark_non_differentiable(inputs[-1])
     ctx.training = training
     return h, c
@@ -207,7 +209,7 @@ class LSTM(nn.Module):
     nn.init.zeros_(self.bias)
     nn.init.constant_(self.bias[hidden_size*2:hidden_size*3], self.forget_bias)
 
-  def forward(self, input, lengths=None):
+  def forward(self, input, state=None, lengths=None):
     """
     Runs a forward pass of the LSTM layer.
 
@@ -243,7 +245,18 @@ class LSTM(nn.Module):
     else:
       zoneout_mask = torch.empty(0, dtype=input.dtype, device=input.device)
 
-    h, c = self._impl(input, zoneout_mask)
+    if state is None:
+      h0 = torch.zeros(input.shape[1], self.hidden_size, dtype=input.dtype, device=input.device)
+      c0 = torch.zeros_like(h0)
+      state = (h0, c0)
+    elif not isinstance(state, (list, tuple)) or len(state) != 2:
+      raise ValueError('initial state for LSTM must be length-2 list or tuple (h_0, c_0)')
+    elif state[0].shape[0] != 1 or state[1].shape[0] != 1:
+      raise ValueError('initial state for LSTM must have leading dimension of 1')
+    else:
+      h0, c0 = state[0][0], state[1][0]
+
+    h, c = self._impl(input, (h0, c0), zoneout_mask)
 
     if lengths is not None:
       cols = range(h.size(1))
@@ -257,7 +270,7 @@ class LSTM(nn.Module):
 
     return output, state
 
-  def _impl(self, input, zoneout_mask):
+  def _impl(self, input, state, zoneout_mask):
     tensors = [input, self.kernel, self.recurrent_kernel, self.bias]
     is_cuda = [tensor.is_cuda for tensor in tensors]
     if any(is_cuda) and not all(is_cuda):
@@ -268,6 +281,8 @@ class LSTM(nn.Module):
           self.training,
           self.zoneout,
           input.contiguous(),
+          state[0].contiguous(),
+          state[1].contiguous(),
           self.kernel.contiguous(),
           F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
           self.bias.contiguous(),
@@ -277,6 +292,8 @@ class LSTM(nn.Module):
           self.training,
           self.zoneout,
           input.contiguous(),
+          state[0].contiguous(),
+          state[1].contiguous(),
           self.kernel.contiguous(),
           F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
           self.bias.contiguous(),

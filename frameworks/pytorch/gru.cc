@@ -31,6 +31,7 @@ std::vector<Tensor> gru_forward(
     bool training,
     float zoneout_prob,
     Tensor x,
+    Tensor h0,
     Tensor kernel,
     Tensor recurrent_kernel,
     Tensor bias,
@@ -43,16 +44,19 @@ std::vector<Tensor> gru_forward(
   const bool has_zoneout = zoneout_prob && zoneout_mask.size(0);
 
   CHECK_INPUT(x);
+  CHECK_INPUT(h0);
   CHECK_INPUT(kernel);
   CHECK_INPUT(recurrent_kernel);
   CHECK_INPUT(bias);
   CHECK_INPUT(recurrent_bias);
   CHECK_INPUT(zoneout_mask);
 
-  Tensor output = torch::zeros({ time_steps, batch_size, hidden_size }, at::kCUDA);
+  Tensor output = torch::empty({ time_steps + 1, batch_size, hidden_size }, at::kCUDA);
   Tensor cache = torch::empty({ time_steps, batch_size, hidden_size * 4 }, at::kCUDA);
   Tensor tmp_Wx = torch::empty({ time_steps, batch_size, hidden_size * 3 }, at::kCUDA);
   Tensor tmp_Rh = torch::empty({ batch_size, hidden_size * 3 }, at::kCUDA);
+
+  output[0] = h0;
 
   AT_DISPATCH_FLOATING_TYPES(x.type(), "gru_forward", ([&] {
     ForwardPass<scalar_t> forward(
@@ -75,8 +79,8 @@ std::vector<Tensor> gru_forward(
           bias.data<scalar_t>(),
           recurrent_bias.data<scalar_t>(),
           x_a[i].data(),
-          output_a[std::max(i - 1, decltype(i){0})].data(),
           output_a[i].data(),
+          output_a[i+1].data(),
           cache_a[i].data(),
           tmp_Wx_a[i].data(),
           tmp_Rh.data<scalar_t>(),
@@ -147,9 +151,9 @@ std::vector<Tensor> gru_backward(
           bias.data<scalar_t>(),
           recurrent_bias.data<scalar_t>(),
           x_t_a[i].data(),
-          i == 0 ? zeros.data<scalar_t>() : h_t_a[i - 1].data(),
+          h_t_a[i].data(),
           cache_a[i].data(),
-          dh_new_a[i].data(),
+          dh_new_a[i+1].data(),
           dx_a[i].data(),
           dW.data<scalar_t>(),
           dR.data<scalar_t>(),
@@ -162,7 +166,7 @@ std::vector<Tensor> gru_backward(
     }
   }));
 
-  return { dx, dW, dR, dbx, dbr };
+  return { dx, dh, dW, dR, dbx, dbr };
 }
 
 }  // anonymous namespace

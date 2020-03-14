@@ -31,6 +31,8 @@ std::vector<Tensor> layer_norm_lstm_forward(
     bool training,
     float zoneout_prob,
     Tensor x,
+    Tensor h0,
+    Tensor c0,
     Tensor kernel,
     Tensor recurrent_kernel,
     Tensor bias,
@@ -45,6 +47,8 @@ std::vector<Tensor> layer_norm_lstm_forward(
   const bool has_zoneout = zoneout_prob && zoneout_mask.size(0);
 
   CHECK_INPUT(x);
+  CHECK_INPUT(h0);
+  CHECK_INPUT(c0);
   CHECK_INPUT(kernel);
   CHECK_INPUT(recurrent_kernel);
   CHECK_INPUT(bias);
@@ -63,6 +67,9 @@ std::vector<Tensor> layer_norm_lstm_forward(
   Tensor act_c_norm = torch::empty({ time_steps, batch_size, hidden_size }, at::kCUDA);
   Tensor act_c_norm_cache = torch::empty({ time_steps, batch_size, 2 }, at::kCUDA);
   Tensor tmp_Rh = torch::empty({ batch_size, hidden_size * 4 }, at::kCUDA);
+
+  output[0] = h0;
+  output_state[0] = c0;
 
   AT_DISPATCH_FLOATING_TYPES(x.type(), "layer_norm_lstm_forward", ([&] {
     auto gamma_a = gamma.packed_accessor<scalar_t, 2>();
@@ -250,7 +257,7 @@ std::vector<Tensor> layer_norm_lstm_backward(
         has_zoneout ? zoneout_mask.data<scalar_t>() : nullptr);
   }));
 
-  return { dx, dW, dR, db, dgamma, dgamma_h, dbeta_h };
+  return { dx, dh, dc, dW, dR, db, dgamma, dgamma_h, dbeta_h };
 }
 
 }  // anonymous namespace

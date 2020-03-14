@@ -31,6 +31,8 @@ std::vector<Tensor> lstm_forward(
     bool training,
     float zoneout_prob,
     Tensor x,
+    Tensor h0,
+    Tensor c0,
     Tensor kernel,
     Tensor recurrent_kernel,
     Tensor bias,
@@ -42,15 +44,20 @@ std::vector<Tensor> lstm_forward(
   const bool has_zoneout = zoneout_prob && zoneout_mask.size(0);
 
   CHECK_INPUT(x);
+  CHECK_INPUT(h0);
+  CHECK_INPUT(c0);
   CHECK_INPUT(kernel);
   CHECK_INPUT(recurrent_kernel);
   CHECK_INPUT(bias);
   CHECK_INPUT(zoneout_mask);
 
-  Tensor output = torch::zeros({ time_steps + 1, batch_size, hidden_size }, at::kCUDA);
-  Tensor output_state = torch::zeros({ time_steps + 1, batch_size, hidden_size }, at::kCUDA);
+  Tensor output = torch::empty({ time_steps + 1, batch_size, hidden_size }, at::kCUDA);
+  Tensor output_state = torch::empty({ time_steps + 1, batch_size, hidden_size }, at::kCUDA);
   Tensor cache = torch::empty({ time_steps, batch_size, hidden_size * 4 }, at::kCUDA);
   Tensor tmp_Rh = torch::empty({ batch_size, hidden_size * 4 }, at::kCUDA);
+
+  output[0] = h0;
+  output_state[0] = c0;
 
   AT_DISPATCH_FLOATING_TYPES(x.type(), "lstm_forward", ([&] {
     ForwardPass<scalar_t> forward(
@@ -139,7 +146,7 @@ std::vector<Tensor> lstm_backward(
         has_zoneout ? zoneout_mask.data<scalar_t>() : nullptr);
   }));
 
-  return { dx, dW, dR, db };
+  return { dx, dh, dc, dW, dR, db };
 }
 
 }  // anonymous namespace

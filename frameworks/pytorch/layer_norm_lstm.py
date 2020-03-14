@@ -32,6 +32,8 @@ def LayerNormLSTMScript(
     training: bool,
     zoneout_prob: float,
     input,
+    h0,
+    c0,
     kernel,
     recurrent_kernel,
     bias,
@@ -45,8 +47,8 @@ def LayerNormLSTMScript(
 
   dtype, device = input.dtype, input.device
 
-  h = [torch.zeros([batch_size, hidden_size], dtype=dtype, device=device)]
-  c = [torch.zeros([batch_size, hidden_size], dtype=dtype, device=device)]
+  h = [h0]
+  c = [c0]
   Wx = F.layer_norm(input @ kernel, (hidden_size * 4,), weight=gamma[0])
   for t in range(time_steps):
     v = F.layer_norm(h[t] @ recurrent_kernel, (hidden_size * 4,), weight=gamma[1]) + Wx[t] + bias
@@ -71,7 +73,7 @@ class LayerNormLSTMFunction(torch.autograd.Function):
   @staticmethod
   def forward(ctx, training, zoneout_prob, *inputs):
     outputs = LIB.layer_norm_lstm_forward(training, zoneout_prob, *inputs)
-    ctx.save_for_backward(*inputs, *outputs)
+    ctx.save_for_backward(inputs[0], *inputs[3:], *outputs)
     ctx.mark_non_differentiable(inputs[-1])  # zoneout mask is non-differentiable
     ctx.training = training
     return outputs[0], outputs[1]
@@ -179,7 +181,7 @@ class LayerNormLSTM(nn.Module):
     nn.init.ones_(self.gamma_h)
     nn.init.zeros_(self.beta_h)
 
-  def forward(self, input, lengths=None):
+  def forward(self, input, state=None, lengths=None):
     """
     Runs a forward pass of the LSTM layer.
 
@@ -215,7 +217,18 @@ class LayerNormLSTM(nn.Module):
     else:
       zoneout_mask = torch.empty(0, dtype=input.dtype, device=input.device)
 
-    h, c = self._impl(input, zoneout_mask)
+    if state is None:
+      h0 = torch.zeros(input.shape[1], self.hidden_size, dtype=input.dtype, device=input.device)
+      c0 = torch.zeros_like(h0)
+      state = (h0, c0)
+    elif not isinstance(state, (list, tuple)) or len(state) != 2:
+      raise ValueError('initial state for LayerNormLSTM must be length-2 list or tuple (h_0, c_0)')
+    elif state[0].shape[0] != 1 or state[1].shape[0] != 1:
+      raise ValueError('initial state for LayerNormLSTM must have leading dimension of 1')
+    else:
+      h0, c0 = state[0][0], state[1][0]
+
+    h, c = self._impl(input, (h0, c0), zoneout_mask)
 
     if lengths is not None:
       cols = range(h.size(1))
@@ -229,7 +242,7 @@ class LayerNormLSTM(nn.Module):
 
     return output, state
 
-  def _impl(self, input, zoneout_mask):
+  def _impl(self, input, state, zoneout_mask):
     tensors = [input, self.kernel, self.recurrent_kernel, self.bias]
     is_cuda = [tensor.is_cuda for tensor in tensors]
     if any(is_cuda) and not all(is_cuda):
@@ -240,6 +253,8 @@ class LayerNormLSTM(nn.Module):
           self.training,
           self.zoneout,
           input.contiguous(),
+          state[0].contiguous(),
+          state[1].contiguous(),
           self.kernel.contiguous(),
           F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
           self.bias.contiguous(),
@@ -252,6 +267,8 @@ class LayerNormLSTM(nn.Module):
           self.training,
           self.zoneout,
           input.contiguous(),
+          state[0].contiguous(),
+          state[1].contiguous(),
           self.kernel.contiguous(),
           F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
           self.bias.contiguous(),
