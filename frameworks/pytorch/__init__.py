@@ -19,11 +19,13 @@ Haste: a fast, simple, and open RNN library.
 
 
 from .gru import GRU
+from .indrnn import IndRNN
 from .lstm import LSTM
 from .layer_norm_lstm import LayerNormLSTM
 
 __all__ = [
     'GRU',
+    'IndRNN',
     'LSTM',
     'LayerNormLSTM'
 ]

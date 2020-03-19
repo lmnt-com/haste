@@ -16,11 +16,13 @@
 #include <torch/extension.h>
 
 void gru_init(py::module&);
+void indrnn_init(py::module&);
 void lstm_init(py::module&);
 void layer_norm_lstm_init(py::module&);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   gru_init(m);
+  indrnn_init(m);
   lstm_init(m);
   layer_norm_lstm_init(m);
 }

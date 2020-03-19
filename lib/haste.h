@@ -25,7 +25,8 @@
 //     H = hidden size
 // and the rightmost dimension changes the fastest.
 
-#include "haste/lstm.h"
 #include "haste/gru.h"
+#include "haste/indrnn.h"
 #include "haste/layer_norm.h"
 #include "haste/layer_norm_lstm.h"
+#include "haste/lstm.h"
