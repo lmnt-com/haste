@@ -71,29 +71,29 @@ std::vector<Tensor> layer_norm_lstm_forward(
   output[0] = h0;
   output_state[0] = c0;
 
-  AT_DISPATCH_FLOATING_TYPES(x.type(), "layer_norm_lstm_forward", ([&] {
-    auto gamma_a = gamma.packed_accessor<scalar_t, 2>();
+  AT_DISPATCH_FLOATING_TYPES(x.scalar_type(), "layer_norm_lstm_forward", ([&] {
+    auto gamma_a = gamma.packed_accessor32<scalar_t, (int)2>();
 
     layer_norm::ForwardPass<scalar_t> layer_norm1(
         time_steps * batch_size,
         hidden_size * 4,
         gamma_a[0].data(),
         nullptr,
-        act_Wx_norm_cache.data<scalar_t>());
+        act_Wx_norm_cache.data_ptr<scalar_t>());
 
     layer_norm::ForwardPass<scalar_t> layer_norm2(
         time_steps * batch_size,
         hidden_size * 4,
         gamma_a[1].data(),
         nullptr,
-        act_Rh_norm_cache.data<scalar_t>());
+        act_Rh_norm_cache.data_ptr<scalar_t>());
 
     layer_norm::ForwardPass<scalar_t> layer_norm3(
         time_steps * batch_size,
         hidden_size,
-        gamma_h.data<scalar_t>(),
-        beta_h.data<scalar_t>(),
-        act_c_norm_cache.data<scalar_t>());
+        gamma_h.data_ptr<scalar_t>(),
+        beta_h.data_ptr<scalar_t>(),
+        act_c_norm_cache.data_ptr<scalar_t>());
 
     layer_norm_lstm::ForwardPass<scalar_t> lstm(
         training,
@@ -104,22 +104,22 @@ std::vector<Tensor> layer_norm_lstm_forward(
 
     lstm.Run(
         time_steps,
-        kernel.data<scalar_t>(),
-        recurrent_kernel.data<scalar_t>(),
-        bias.data<scalar_t>(),
-        x.data<scalar_t>(),
-        output.data<scalar_t>(),
-        output_state.data<scalar_t>(),
-        act_Wx.data<scalar_t>(),
-        tmp_Rh.data<scalar_t>(),
+        kernel.data_ptr<scalar_t>(),
+        recurrent_kernel.data_ptr<scalar_t>(),
+        bias.data_ptr<scalar_t>(),
+        x.data_ptr<scalar_t>(),
+        output.data_ptr<scalar_t>(),
+        output_state.data_ptr<scalar_t>(),
+        act_Wx.data_ptr<scalar_t>(),
+        tmp_Rh.data_ptr<scalar_t>(),
         layer_norm1,
-        act_Wx_norm.data<scalar_t>(),
-        act_Rh.data<scalar_t>(),
+        act_Wx_norm.data_ptr<scalar_t>(),
+        act_Rh.data_ptr<scalar_t>(),
         layer_norm2,
         layer_norm3,
-        act_c_norm.data<scalar_t>(),
+        act_c_norm.data_ptr<scalar_t>(),
         has_zoneout ? zoneout_prob : 0.0f,
-        has_zoneout ? zoneout_mask.data<scalar_t>() : nullptr);
+        has_zoneout ? zoneout_mask.data_ptr<scalar_t>() : nullptr);
   }));
 
   return {
@@ -190,40 +190,40 @@ std::vector<Tensor> layer_norm_lstm_backward(
   Tensor dh = torch::zeros({ batch_size, hidden_size }, at::kCUDA);
   Tensor dc = torch::zeros({ batch_size, hidden_size }, at::kCUDA);
 
-  AT_DISPATCH_FLOATING_TYPES(x_t.type(), "layer_norm_lstm_backward", ([&] {
-    auto gamma_a = gamma.packed_accessor<scalar_t, 2>();
-    auto dgamma_a = dgamma.packed_accessor<scalar_t, 2>();
-    auto c_a = c.packed_accessor<scalar_t, 3>();
+  AT_DISPATCH_FLOATING_TYPES(x_t.scalar_type(), "layer_norm_lstm_backward", ([&] {
+    auto gamma_a = gamma.packed_accessor32<scalar_t, 2>();
+    auto dgamma_a = dgamma.packed_accessor32<scalar_t, 2>();
+    auto c_a = c.packed_accessor32<scalar_t, 3>();
 
     layer_norm::BackwardPass<scalar_t> layer_norm1(
         time_steps * batch_size,
         hidden_size * 4,
         gamma_a[0].data(),
         nullptr,
-        act_Wx.data<scalar_t>(),
+        act_Wx.data_ptr<scalar_t>(),
         dgamma_a[0].data(),
         nullptr,
-        act_Wx_norm_cache.data<scalar_t>());
+        act_Wx_norm_cache.data_ptr<scalar_t>());
 
     layer_norm::BackwardPass<scalar_t> layer_norm2(
         time_steps * batch_size,
         hidden_size * 4,
         gamma_a[1].data(),
         nullptr,
-        act_Rh.data<scalar_t>(),
+        act_Rh.data_ptr<scalar_t>(),
         dgamma_a[1].data(),
         nullptr,
-        act_Rh_norm_cache.data<scalar_t>());
+        act_Rh_norm_cache.data_ptr<scalar_t>());
 
     layer_norm::BackwardPass<scalar_t> layer_norm3(
         time_steps * batch_size,
         hidden_size,
-        gamma_h.data<scalar_t>(),
-        beta_h.data<scalar_t>(),
+        gamma_h.data_ptr<scalar_t>(),
+        beta_h.data_ptr<scalar_t>(),
         c_a[1].data(),
-        dgamma_h.data<scalar_t>(),
-        dbeta_h.data<scalar_t>(),
-        act_c_norm_cache.data<scalar_t>());
+        dgamma_h.data_ptr<scalar_t>(),
+        dbeta_h.data_ptr<scalar_t>(),
+        act_c_norm_cache.data_ptr<scalar_t>());
 
     layer_norm_lstm::BackwardPass<scalar_t> lstm(
         batch_size,
@@ -233,28 +233,28 @@ std::vector<Tensor> layer_norm_lstm_backward(
 
     lstm.Run(
         time_steps,
-        kernel_t.data<scalar_t>(),
-        recurrent_kernel_t.data<scalar_t>(),
-        bias.data<scalar_t>(),
-        x_t.data<scalar_t>(),
-        h.data<scalar_t>(),
-        c.data<scalar_t>(),
-        dh_new.data<scalar_t>(),
-        dc_new.data<scalar_t>(),
-        dx.data<scalar_t>(),
-        dW.data<scalar_t>(),
-        dR.data<scalar_t>(),
-        db.data<scalar_t>(),
-        dh.data<scalar_t>(),
-        dc.data<scalar_t>(),
-        act_Wx.data<scalar_t>(),
+        kernel_t.data_ptr<scalar_t>(),
+        recurrent_kernel_t.data_ptr<scalar_t>(),
+        bias.data_ptr<scalar_t>(),
+        x_t.data_ptr<scalar_t>(),
+        h.data_ptr<scalar_t>(),
+        c.data_ptr<scalar_t>(),
+        dh_new.data_ptr<scalar_t>(),
+        dc_new.data_ptr<scalar_t>(),
+        dx.data_ptr<scalar_t>(),
+        dW.data_ptr<scalar_t>(),
+        dR.data_ptr<scalar_t>(),
+        db.data_ptr<scalar_t>(),
+        dh.data_ptr<scalar_t>(),
+        dc.data_ptr<scalar_t>(),
+        act_Wx.data_ptr<scalar_t>(),
         layer_norm1,
-        act_Wx_norm.data<scalar_t>(),
-        act_Rh.data<scalar_t>(),
+        act_Wx_norm.data_ptr<scalar_t>(),
+        act_Rh.data_ptr<scalar_t>(),
         layer_norm2,
         layer_norm3,
-        act_c_norm.data<scalar_t>(),
-        has_zoneout ? zoneout_mask.data<scalar_t>() : nullptr);
+        act_c_norm.data_ptr<scalar_t>(),
+        has_zoneout ? zoneout_mask.data_ptr<scalar_t>() : nullptr);
   }));
 
   return { dx, dh, dc, dW, dR, db, dgamma, dgamma_h, dbeta_h };

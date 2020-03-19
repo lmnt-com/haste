@@ -59,7 +59,7 @@ std::vector<Tensor> lstm_forward(
   output[0] = h0;
   output_state[0] = c0;
 
-  AT_DISPATCH_FLOATING_TYPES(x.type(), "lstm_forward", ([&] {
+  AT_DISPATCH_FLOATING_TYPES(x.scalar_type(), "lstm_forward", ([&] {
     ForwardPass<scalar_t> forward(
         training,
         batch_size,
@@ -69,16 +69,16 @@ std::vector<Tensor> lstm_forward(
 
     forward.Run(
         time_steps,
-        kernel.data<scalar_t>(),
-        recurrent_kernel.data<scalar_t>(),
-        bias.data<scalar_t>(),
-        x.data<scalar_t>(),
-        output.data<scalar_t>(),
-        output_state.data<scalar_t>(),
-        cache.data<scalar_t>(),
-        tmp_Rh.data<scalar_t>(),
+        kernel.data_ptr<scalar_t>(),
+        recurrent_kernel.data_ptr<scalar_t>(),
+        bias.data_ptr<scalar_t>(),
+        x.data_ptr<scalar_t>(),
+        output.data_ptr<scalar_t>(),
+        output_state.data_ptr<scalar_t>(),
+        cache.data_ptr<scalar_t>(),
+        tmp_Rh.data_ptr<scalar_t>(),
         has_zoneout ? zoneout_prob : 0.0f,
-        has_zoneout ? zoneout_mask.data<scalar_t>() : nullptr);
+        has_zoneout ? zoneout_mask.data_ptr<scalar_t>() : nullptr);
   }));
 
   return { output, output_state, cache };
@@ -119,7 +119,7 @@ std::vector<Tensor> lstm_backward(
   Tensor dh = torch::zeros({ batch_size, hidden_size }, at::kCUDA);
   Tensor dc = torch::zeros({ batch_size, hidden_size }, at::kCUDA);
 
-  AT_DISPATCH_FLOATING_TYPES(x_t.type(), "lstm_backward", ([&] {
+  AT_DISPATCH_FLOATING_TYPES(x_t.scalar_type(), "lstm_backward", ([&] {
     BackwardPass<scalar_t> backward(
         batch_size,
         input_size,
@@ -128,22 +128,22 @@ std::vector<Tensor> lstm_backward(
 
     backward.Run(
         time_steps,
-        kernel_t.data<scalar_t>(),
-        recurrent_kernel_t.data<scalar_t>(),
-        bias.data<scalar_t>(),
-        x_t.data<scalar_t>(),
-        h.data<scalar_t>(),
-        c.data<scalar_t>(),
-        dh_new.data<scalar_t>(),
-        dc_new.data<scalar_t>(),
-        dx.data<scalar_t>(),
-        dW.data<scalar_t>(),
-        dR.data<scalar_t>(),
-        db.data<scalar_t>(),
-        dh.data<scalar_t>(),
-        dc.data<scalar_t>(),
-        cache.data<scalar_t>(),
-        has_zoneout ? zoneout_mask.data<scalar_t>() : nullptr);
+        kernel_t.data_ptr<scalar_t>(),
+        recurrent_kernel_t.data_ptr<scalar_t>(),
+        bias.data_ptr<scalar_t>(),
+        x_t.data_ptr<scalar_t>(),
+        h.data_ptr<scalar_t>(),
+        c.data_ptr<scalar_t>(),
+        dh_new.data_ptr<scalar_t>(),
+        dc_new.data_ptr<scalar_t>(),
+        dx.data_ptr<scalar_t>(),
+        dW.data_ptr<scalar_t>(),
+        dR.data_ptr<scalar_t>(),
+        db.data_ptr<scalar_t>(),
+        dh.data_ptr<scalar_t>(),
+        dc.data_ptr<scalar_t>(),
+        cache.data_ptr<scalar_t>(),
+        has_zoneout ? zoneout_mask.data_ptr<scalar_t>() : nullptr);
   }));
 
   return { dx, dh, dc, dW, dR, db };

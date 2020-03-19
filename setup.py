@@ -72,6 +72,7 @@ elif sys.argv[1] == 'haste_pytorch':
   extension = cpp_extension.CppExtension(
       'haste_pytorch_lib',
       sources = glob('pytorch/*.cc'),
+      extra_compile_args = ['-Wno-sign-compare'],
       include_dirs = ['lib', '/usr/local/cuda/include'],
       libraries = ['haste'],
       library_dirs = ['.'])

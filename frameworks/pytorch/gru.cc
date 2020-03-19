@@ -58,7 +58,7 @@ std::vector<Tensor> gru_forward(
 
   output[0] = h0;
 
-  AT_DISPATCH_FLOATING_TYPES(x.type(), "gru_forward", ([&] {
+  AT_DISPATCH_FLOATING_TYPES(x.scalar_type(), "gru_forward", ([&] {
     ForwardPass<scalar_t> forward(
         training,
         batch_size,
@@ -66,24 +66,24 @@ std::vector<Tensor> gru_forward(
         hidden_size,
         at::cuda::getCurrentCUDABlasHandle());
 
-    auto x_a = x.packed_accessor<scalar_t, 3>();
-    auto output_a = output.packed_accessor<scalar_t, 3>();
-    auto cache_a = cache.packed_accessor<scalar_t, 3>();
-    auto tmp_Wx_a = tmp_Wx.packed_accessor<scalar_t, 3>();
-    auto zoneout_mask_a = zoneout_mask.packed_accessor<scalar_t, 3>();
+    auto x_a = x.packed_accessor32<scalar_t, 3>();
+    auto output_a = output.packed_accessor32<scalar_t, 3>();
+    auto cache_a = cache.packed_accessor32<scalar_t, 3>();
+    auto tmp_Wx_a = tmp_Wx.packed_accessor32<scalar_t, 3>();
+    auto zoneout_mask_a = zoneout_mask.packed_accessor32<scalar_t, 3>();
 
     for (auto i = decltype(time_steps){0}; i < time_steps; ++i) {
       forward.Iterate(
-          kernel.data<scalar_t>(),
-          recurrent_kernel.data<scalar_t>(),
-          bias.data<scalar_t>(),
-          recurrent_bias.data<scalar_t>(),
+          kernel.data_ptr<scalar_t>(),
+          recurrent_kernel.data_ptr<scalar_t>(),
+          bias.data_ptr<scalar_t>(),
+          recurrent_bias.data_ptr<scalar_t>(),
           x_a[i].data(),
           output_a[i].data(),
           output_a[i+1].data(),
           cache_a[i].data(),
           tmp_Wx_a[i].data(),
-          tmp_Rh.data<scalar_t>(),
+          tmp_Rh.data_ptr<scalar_t>(),
           has_zoneout ? zoneout_prob : 0.0f,
           has_zoneout ? zoneout_mask_a[i].data() : nullptr);
     }
@@ -128,38 +128,38 @@ std::vector<Tensor> gru_backward(
   Tensor dq = torch::empty({ time_steps, batch_size, hidden_size * 3 }, at::kCUDA);
   Tensor zeros = torch::zeros({ batch_size, hidden_size }, at::kCUDA);
 
-  AT_DISPATCH_FLOATING_TYPES(x_t.type(), "gru_backward", ([&] {
+  AT_DISPATCH_FLOATING_TYPES(x_t.scalar_type(), "gru_backward", ([&] {
     BackwardPass<scalar_t> backward(
         batch_size,
         input_size,
         hidden_size,
         at::cuda::getCurrentCUDABlasHandle());
 
-    auto x_t_a = x_t.packed_accessor<scalar_t, 3>();
-    auto h_t_a = h_t.packed_accessor<scalar_t, 3>();
-    auto cache_a = cache.packed_accessor<scalar_t, 3>();
-    auto dh_new_a = dh_new.packed_accessor<scalar_t, 3>();
-    auto dx_a = dx.packed_accessor<scalar_t, 3>();
-    auto dp_a = dp.packed_accessor<scalar_t, 3>();
-    auto dq_a = dq.packed_accessor<scalar_t, 3>();
-    auto zoneout_mask_a = zoneout_mask.packed_accessor<scalar_t, 3>();
+    auto x_t_a = x_t.packed_accessor32<scalar_t, 3>();
+    auto h_t_a = h_t.packed_accessor32<scalar_t, 3>();
+    auto cache_a = cache.packed_accessor32<scalar_t, 3>();
+    auto dh_new_a = dh_new.packed_accessor32<scalar_t, 3>();
+    auto dx_a = dx.packed_accessor32<scalar_t, 3>();
+    auto dp_a = dp.packed_accessor32<scalar_t, 3>();
+    auto dq_a = dq.packed_accessor32<scalar_t, 3>();
+    auto zoneout_mask_a = zoneout_mask.packed_accessor32<scalar_t, 3>();
 
     for (auto i = time_steps - 1; i >= 0; --i) {
       backward.Iterate(
-          kernel_t.data<scalar_t>(),
-          recurrent_kernel_t.data<scalar_t>(),
-          bias.data<scalar_t>(),
-          recurrent_bias.data<scalar_t>(),
+          kernel_t.data_ptr<scalar_t>(),
+          recurrent_kernel_t.data_ptr<scalar_t>(),
+          bias.data_ptr<scalar_t>(),
+          recurrent_bias.data_ptr<scalar_t>(),
           x_t_a[i].data(),
           h_t_a[i].data(),
           cache_a[i].data(),
           dh_new_a[i+1].data(),
           dx_a[i].data(),
-          dW.data<scalar_t>(),
-          dR.data<scalar_t>(),
-          dbx.data<scalar_t>(),
-          dbr.data<scalar_t>(),
-          dh.data<scalar_t>(),
+          dW.data_ptr<scalar_t>(),
+          dR.data_ptr<scalar_t>(),
+          dbx.data_ptr<scalar_t>(),
+          dbr.data_ptr<scalar_t>(),
+          dh.data_ptr<scalar_t>(),
           dp_a[i].data(),
           dq_a[i].data(),
           has_zoneout ? zoneout_mask_a[i].data() : nullptr);

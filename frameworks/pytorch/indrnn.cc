@@ -50,7 +50,7 @@ Tensor indrnn_forward(
 
   output[0] = h0;
 
-  AT_DISPATCH_FLOATING_TYPES(x.type(), "indrnn_forward", ([&] {
+  AT_DISPATCH_FLOATING_TYPES(x.scalar_type(), "indrnn_forward", ([&] {
     ForwardPass<scalar_t> forward(
         training,
         batch_size,
@@ -60,12 +60,12 @@ Tensor indrnn_forward(
 
     forward.Run(
         time_steps,
-        kernel.data<scalar_t>(),
-        recurrent_scale.data<scalar_t>(),
-        bias.data<scalar_t>(),
-        x.data<scalar_t>(),
-        output.data<scalar_t>(),
-        workspace.data<scalar_t>());
+        kernel.data_ptr<scalar_t>(),
+        recurrent_scale.data_ptr<scalar_t>(),
+        bias.data_ptr<scalar_t>(),
+        x.data_ptr<scalar_t>(),
+        output.data_ptr<scalar_t>(),
+        workspace.data_ptr<scalar_t>());
   }));
 
   return output;
@@ -97,7 +97,7 @@ std::vector<Tensor> indrnn_backward(
   Tensor dh = torch::zeros({ batch_size, hidden_size }, at::kCUDA);
   Tensor workspace = torch::empty({ time_steps, batch_size, hidden_size }, at::kCUDA);
 
-  AT_DISPATCH_FLOATING_TYPES(x_t.type(), "indrnn_backward", ([&] {
+  AT_DISPATCH_FLOATING_TYPES(x_t.scalar_type(), "indrnn_backward", ([&] {
     BackwardPass<scalar_t> backward(
         batch_size,
         input_size,
@@ -106,18 +106,18 @@ std::vector<Tensor> indrnn_backward(
 
     backward.Run(
         time_steps,
-        kernel_t.data<scalar_t>(),
-        recurrent_scale.data<scalar_t>(),
-        bias.data<scalar_t>(),
-        x_t.data<scalar_t>(),
-        h.data<scalar_t>(),
-        dh_new.data<scalar_t>(),
-        dx.data<scalar_t>(),
-        dW.data<scalar_t>(),
-        du.data<scalar_t>(),
-        db.data<scalar_t>(),
-        dh.data<scalar_t>(),
-        workspace.data<scalar_t>());
+        kernel_t.data_ptr<scalar_t>(),
+        recurrent_scale.data_ptr<scalar_t>(),
+        bias.data_ptr<scalar_t>(),
+        x_t.data_ptr<scalar_t>(),
+        h.data_ptr<scalar_t>(),
+        dh_new.data_ptr<scalar_t>(),
+        dx.data_ptr<scalar_t>(),
+        dW.data_ptr<scalar_t>(),
+        du.data_ptr<scalar_t>(),
+        db.data_ptr<scalar_t>(),
+        dh.data_ptr<scalar_t>(),
+        workspace.data_ptr<scalar_t>());
   }));
 
   return { dx, dh, dW, du, db };
