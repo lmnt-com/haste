@@ -42,8 +42,6 @@ def GRUScript(
   batch_size = input.shape[1]
   hidden_size = recurrent_kernel.shape[0]
 
-  dtype, device = input.dtype, input.device
-
   h = [h0]
   Wx = input @ kernel + bias
   for t in range(time_steps):
@@ -151,11 +149,10 @@ class GRU(nn.Module):
     self.dropout = dropout
     self.zoneout = zoneout
 
-    gpu = torch.device('cuda')
-    self.kernel = nn.Parameter(torch.empty(input_size, hidden_size * 3, device=gpu))
-    self.recurrent_kernel = nn.Parameter(torch.empty(hidden_size, hidden_size * 3, device=gpu))
-    self.bias = nn.Parameter(torch.empty(hidden_size * 3, device=gpu))
-    self.recurrent_bias = nn.Parameter(torch.empty(hidden_size * 3, device=gpu))
+    self.kernel = nn.Parameter(torch.empty(input_size, hidden_size * 3))
+    self.recurrent_kernel = nn.Parameter(torch.empty(hidden_size, hidden_size * 3))
+    self.bias = nn.Parameter(torch.empty(hidden_size * 3))
+    self.recurrent_bias = nn.Parameter(torch.empty(hidden_size * 3))
     self.reset_parameters()
 
   def to_native_weights(self):
@@ -197,10 +194,10 @@ class GRU(nn.Module):
       r, z, n = torch.chunk(w, 3, axis=-1)
       return torch.cat([z, r, n], dim=-1)
 
-    kernel = reorder_weights(weight_ih_l0.permute(1, 0)).contiguous().cuda()
-    recurrent_kernel = reorder_weights(weight_hh_l0.permute(1, 0)).contiguous().cuda()
-    bias = reorder_weights(bias_ih_l0).contiguous().cuda()
-    recurrent_bias = reorder_weights(bias_hh_l0).contiguous().cuda()
+    kernel = reorder_weights(weight_ih_l0.permute(1, 0)).contiguous()
+    recurrent_kernel = reorder_weights(weight_hh_l0.permute(1, 0)).contiguous()
+    bias = reorder_weights(bias_ih_l0).contiguous()
+    recurrent_bias = reorder_weights(bias_hh_l0).contiguous()
 
     self.kernel = nn.Parameter(kernel)
     self.recurrent_kernel = nn.Parameter(recurrent_kernel)
@@ -242,18 +239,13 @@ class GRU(nn.Module):
       input = input.permute(1, 0, 2)
 
     if self.zoneout:
-      zoneout_mask = torch.empty(
-          input.shape[0],
-          input.shape[1],
-          self.hidden_size,
-          dtype=input.dtype,
-          device=input.device)
+      zoneout_mask = input.new_empty(input.shape[0], input.shape[1], self.hidden_size)
       zoneout_mask.bernoulli_(1.0 - self.zoneout)
     else:
-      zoneout_mask = torch.empty(0, 0, 0, dtype=input.dtype, device=input.device)
+      zoneout_mask = input.new_empty(0, 0, 0)
 
     if state is None:
-      state = torch.zeros(input.shape[1], self.hidden_size, dtype=input.dtype, device=input.device)
+      state = input.new_zeros(input.shape[1], self.hidden_size)
     elif state.shape[0] != 1:
       raise ValueError('initial state for GRU must have leading dimension of 1')
     else:

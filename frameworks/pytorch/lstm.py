@@ -42,8 +42,6 @@ def LSTMScript(
   batch_size = input.shape[1]
   hidden_size = recurrent_kernel.shape[0]
 
-  dtype, device = input.dtype, input.device
-
   h = [h0]
   c = [c0]
   Wx = input @ kernel
@@ -150,10 +148,9 @@ class LSTM(nn.Module):
     self.dropout = dropout
     self.zoneout = zoneout
 
-    gpu = torch.device('cuda')
-    self.kernel = nn.Parameter(torch.empty(input_size, hidden_size * 4, device=gpu))
-    self.recurrent_kernel = nn.Parameter(torch.empty(hidden_size, hidden_size * 4, device=gpu))
-    self.bias = nn.Parameter(torch.empty(hidden_size * 4, device=gpu))
+    self.kernel = nn.Parameter(torch.empty(input_size, hidden_size * 4))
+    self.recurrent_kernel = nn.Parameter(torch.empty(hidden_size, hidden_size * 4))
+    self.bias = nn.Parameter(torch.empty(hidden_size * 4))
     self.reset_parameters()
 
   def to_native_weights(self):
@@ -192,9 +189,9 @@ class LSTM(nn.Module):
     def reorder_weights(w):
       i, f, g, o = torch.chunk(w, 4, dim=-1)
       return torch.cat([i, g, f, o], dim=-1)
-    kernel = reorder_weights(weight_ih_l0.permute(1, 0)).contiguous().cuda()
-    recurrent_kernel = reorder_weights(weight_hh_l0.permute(1, 0)).contiguous().cuda()
-    bias = reorder_weights(bias_ih_l0 + bias_hh_l0).contiguous().cuda()
+    kernel = reorder_weights(weight_ih_l0.permute(1, 0)).contiguous()
+    recurrent_kernel = reorder_weights(weight_hh_l0.permute(1, 0)).contiguous()
+    bias = reorder_weights(bias_ih_l0 + bias_hh_l0).contiguous()
 
     self.kernel = nn.Parameter(kernel)
     self.recurrent_kernel = nn.Parameter(recurrent_kernel)
@@ -235,18 +232,13 @@ class LSTM(nn.Module):
       input = input.permute(1, 0, 2)
 
     if self.zoneout:
-      zoneout_mask = torch.empty(
-          input.shape[0],
-          input.shape[1],
-          self.hidden_size,
-          dtype=input.dtype,
-          device=input.device)
+      zoneout_mask = input.new_empty(input.shape[0], input.shape[1], self.hidden_size)
       zoneout_mask.bernoulli_(1.0 - self.zoneout)
     else:
-      zoneout_mask = torch.empty(0, dtype=input.dtype, device=input.device)
+      zoneout_mask = input.new_empty(0)
 
     if state is None:
-      h0 = torch.zeros(input.shape[1], self.hidden_size, dtype=input.dtype, device=input.device)
+      h0 = input.new_zeros(input.shape[1], self.hidden_size)
       c0 = torch.zeros_like(h0)
       state = (h0, c0)
     elif not isinstance(state, (list, tuple)) or len(state) != 2:

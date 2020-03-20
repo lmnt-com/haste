@@ -73,10 +73,9 @@ class IndRNN(nn.Module):
     self.hidden_size = hidden_size
     self.batch_first = batch_first
 
-    gpu = torch.device('cuda')
-    self.kernel = nn.Parameter(torch.empty(input_size, hidden_size, device=gpu))
-    self.recurrent_scale = nn.Parameter(torch.empty(hidden_size, device=gpu))
-    self.bias = nn.Parameter(torch.empty(hidden_size, device=gpu))
+    self.kernel = nn.Parameter(torch.empty(input_size, hidden_size))
+    self.recurrent_scale = nn.Parameter(torch.empty(hidden_size))
+    self.bias = nn.Parameter(torch.empty(hidden_size))
     self.reset_parameters()
 
   def reset_parameters(self):
@@ -89,7 +88,7 @@ class IndRNN(nn.Module):
       input = input.permute(1, 0, 2)
 
     if state is None:
-      h0 = torch.zeros(input.shape[1], self.hidden_size, dtype=input.dtype, device=input.device)
+      h0 = input.new_zeros(input.shape[1], self.hidden_size)
     elif state.shape[0] != 1:
       raise ValueError('initial state for IndRNN must have leading dimesion of 1')
     else:

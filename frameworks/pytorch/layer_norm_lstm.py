@@ -45,8 +45,6 @@ def LayerNormLSTMScript(
   batch_size = input.shape[1]
   hidden_size = recurrent_kernel.shape[0]
 
-  dtype, device = input.dtype, input.device
-
   h = [h0]
   c = [c0]
   Wx = F.layer_norm(input @ kernel, (hidden_size * 4,), weight=gamma[0])
@@ -160,13 +158,12 @@ class LayerNormLSTM(nn.Module):
     self.dropout = dropout
     self.zoneout = zoneout
 
-    gpu = torch.device('cuda')
-    self.kernel = nn.Parameter(torch.empty(input_size, hidden_size * 4, device=gpu))
-    self.recurrent_kernel = nn.Parameter(torch.empty(hidden_size, hidden_size * 4, device=gpu))
-    self.bias = nn.Parameter(torch.empty(hidden_size * 4, device=gpu))
-    self.gamma = nn.Parameter(torch.empty(2, hidden_size * 4, device=gpu))
-    self.gamma_h = nn.Parameter(torch.empty(hidden_size, device=gpu))
-    self.beta_h = nn.Parameter(torch.empty(hidden_size, device=gpu))
+    self.kernel = nn.Parameter(torch.empty(input_size, hidden_size * 4))
+    self.recurrent_kernel = nn.Parameter(torch.empty(hidden_size, hidden_size * 4))
+    self.bias = nn.Parameter(torch.empty(hidden_size * 4))
+    self.gamma = nn.Parameter(torch.empty(2, hidden_size * 4))
+    self.gamma_h = nn.Parameter(torch.empty(hidden_size))
+    self.beta_h = nn.Parameter(torch.empty(hidden_size))
     self.reset_parameters()
 
   def reset_parameters(self):
@@ -207,18 +204,13 @@ class LayerNormLSTM(nn.Module):
       input = input.permute(1, 0, 2)
 
     if self.zoneout:
-      zoneout_mask = torch.empty(
-          input.shape[0],
-          input.shape[1],
-          self.hidden_size,
-          dtype=input.dtype,
-          device=input.device)
+      zoneout_mask = input.new_empty(input.shape[0], input.shape[1], self.hidden_size)
       zoneout_mask.bernoulli_(1.0 - self.zoneout)
     else:
-      zoneout_mask = torch.empty(0, dtype=input.dtype, device=input.device)
+      zoneout_mask = input.new_empty(0)
 
     if state is None:
-      h0 = torch.zeros(input.shape[1], self.hidden_size, dtype=input.dtype, device=input.device)
+      h0 = input.new_zeros(input.shape[1], self.hidden_size)
       c0 = torch.zeros_like(h0)
       state = (h0, c0)
     elif not isinstance(state, (list, tuple)) or len(state) != 2:
