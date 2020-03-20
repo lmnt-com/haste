@@ -30,6 +30,7 @@
 #include "haste.h"
 
 using haste::v0::gru::ForwardPass;
+using haste::v0::gru::BackwardPass;
 using std::string;
 
 using Tensor1 = Eigen::Tensor<float, 1>;
@@ -67,7 +68,12 @@ class ScopeTimer {
     cudaEvent_t start_, stop_;
 };
 
-void GruInference(const Tensor2& W, const Tensor2& R, const Tensor1& bx, const Tensor1& br, const Tensor3& x) {
+void GruInference(
+    const Tensor2& W,
+    const Tensor2& R,
+    const Tensor1& bx,
+    const Tensor1& br,
+    const Tensor3& x) {
   const int time_steps = x.dimension(2);
   const int batch_size = x.dimension(1);
   const int input_size = x.dimension(0);
@@ -80,13 +86,14 @@ void GruInference(const Tensor2& W, const Tensor2& R, const Tensor1& bx, const T
   device_ptr<Tensor1> br_dev(br);
   device_ptr<Tensor3> x_dev(x);
 
-  device_ptr<Tensor2> h_dev(batch_size * hidden_size);
+  device_ptr<Tensor2> h_dev((time_steps + 1) * batch_size * hidden_size);
   device_ptr<Tensor3> tmp_Wx_dev(time_steps * batch_size * hidden_size * 3);
   device_ptr<Tensor2> tmp_Rh_dev(batch_size * hidden_size * 3);
 
   h_dev.zero();
 
-  ScopeTimer t("Inference time:");
+  ScopeTimer t("Inference:");
+
   ForwardPass<float> forward = ForwardPass<float>(
       false,  // training
       batch_size,
@@ -94,22 +101,108 @@ void GruInference(const Tensor2& W, const Tensor2& R, const Tensor1& bx, const T
       hidden_size,
       g_blas_handle);
 
-  for (int t = 0; t < time_steps; ++t) {
-    const float* x_cur_dev = x_dev.data + t * batch_size * input_size;
-    float* tmp_Wx_cur = tmp_Wx_dev.data + t * batch_size * hidden_size * 3;
+  forward.Run(
+      time_steps,
+      W_dev.data,
+      R_dev.data,
+      bx_dev.data,
+      br_dev.data,
+      x_dev.data,
+      h_dev.data,
+      nullptr,
+      tmp_Wx_dev.data,
+      tmp_Rh_dev.data,
+      0.0f,
+      nullptr);
+}
 
-    forward.Iterate(W_dev.data,
-                    R_dev.data,
-                    bx_dev.data,
-                    br_dev.data,
-                    x_cur_dev,
-                    h_dev.data,
-                    h_dev.data,
-                    nullptr,  // v_out
-                    tmp_Wx_cur,
-                    tmp_Rh_dev.data,
-                    0.0f,      // zoneout prob
-                    nullptr);  // zoneout mask
+void GruTrain(
+    const Tensor2& W,
+    const Tensor2& R,
+    const Tensor1& bx,
+    const Tensor1& br,
+    const Tensor3& x,
+    const Tensor3& dh_new) {
+  const int time_steps = x.dimension(2);
+  const int batch_size = x.dimension(1);
+  const int input_size = x.dimension(0);
+  const int hidden_size = R.dimension(1);
+
+  // Copy weights over to GPU.
+  device_ptr<Tensor2> W_dev(W);
+  device_ptr<Tensor2> R_dev(R);
+  device_ptr<Tensor1> bx_dev(bx);
+  device_ptr<Tensor1> br_dev(br);
+  device_ptr<Tensor3> x_dev(x);
+  device_ptr<Tensor3> dh_new_dev(dh_new);
+
+  device_ptr<Tensor2> h_dev((time_steps + 1) * batch_size * hidden_size);
+  device_ptr<Tensor3> tmp_Wx_dev(time_steps * batch_size * hidden_size * 3);
+  device_ptr<Tensor2> tmp_Rh_dev(batch_size * hidden_size * 3);
+  device_ptr<Tensor3> v_dev(time_steps * batch_size * hidden_size * 4);
+
+  h_dev.zero();
+
+  {
+    ScopeTimer t("Train forward:");
+    ForwardPass<float> forward = ForwardPass<float>(
+        true,  // training
+        batch_size,
+        input_size,
+        hidden_size,
+        g_blas_handle);
+
+    forward.Run(
+        time_steps,
+        W_dev.data,
+        R_dev.data,
+        bx_dev.data,
+        br_dev.data,
+        x_dev.data,
+        h_dev.data,
+        v_dev.data,
+        tmp_Wx_dev.data,
+        tmp_Rh_dev.data,
+        0.0f,
+        nullptr);
+  }
+
+  device_ptr<Tensor3> dx_dev(time_steps * batch_size * input_size);
+  device_ptr<Tensor2> dW_dev(input_size * hidden_size * 3);
+  device_ptr<Tensor2> dR_dev(hidden_size * hidden_size * 3);
+  device_ptr<Tensor1> dbx_dev(hidden_size * 3);
+  device_ptr<Tensor1> dbr_dev(hidden_size * 3);
+  device_ptr<Tensor2> dh_dev(batch_size * hidden_size);
+  device_ptr<Tensor3> dp_dev(time_steps * batch_size * hidden_size * 3);
+  device_ptr<Tensor3> dq_dev(time_steps * batch_size * hidden_size * 3);
+
+  {
+    ScopeTimer t("Train backward:");
+    BackwardPass<float> backward(
+        batch_size,
+        input_size,
+        hidden_size,
+        g_blas_handle);
+
+    backward.Run(
+        time_steps,
+        W_dev.data,
+        R_dev.data,
+        bx_dev.data,
+        br_dev.data,
+        x_dev.data,
+        h_dev.data,
+        v_dev.data,
+        dh_new_dev.data,
+        dx_dev.data,
+        dW_dev.data,
+        dR_dev.data,
+        dbx_dev.data,
+        dbr_dev.data,
+        dh_dev.data,
+        dp_dev.data,
+        dq_dev.data,
+        nullptr);
   }
 }
 
@@ -127,13 +220,18 @@ int main() {
   // Input.
   Tensor3 x(INPUT_DIMS, BATCH_SIZE, SEQUENCE_LEN);
 
+  // Gradients from upstream layers.
+  Tensor3 dh(HIDDEN_DIMS, BATCH_SIZE, SEQUENCE_LEN + 1);
+
   W.setRandom();
   R.setRandom();
   bx.setRandom();
   br.setRandom();
   x.setRandom();
+  dh.setRandom();
 
   GruInference(W, R, bx, br, x);
+  GruTrain(W, R, bx, br, x, dh);
 
   cublasDestroy(g_blas_handle);
 

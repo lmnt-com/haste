@@ -81,10 +81,9 @@ class GRUFunction(torch.autograd.Function):
       raise RuntimeError('GRU backward can only be called in training mode')
 
     saved = [*ctx.saved_tensors]
-    saved[0] = saved[0].permute(0, 2, 1).contiguous()
+    saved[0] = saved[0].permute(2, 0, 1).contiguous()
     saved[1] = saved[1].permute(1, 0).contiguous()
     saved[2] = saved[2].permute(1, 0).contiguous()
-    saved[-2] = saved[-2].permute(0, 2, 1).contiguous()
     grads = LIB.gru_backward(*saved, grad_h.contiguous())
     return (None, None, *grads, None)
 

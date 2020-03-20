@@ -66,10 +66,9 @@ def gru_gradient(op, *grads):
   v = op.outputs[1]
 
   # Pre-transpose matrices for better performance.
-  x = tf.transpose(x, [0, 2, 1])
+  x = tf.transpose(x, [2, 0, 1])
   W = tf.transpose(W, [1, 0])
   R = tf.transpose(R, [1, 0])
-  h = tf.transpose(h, [0, 2, 1])
 
   dx, dW, dR, dbx, dbr = LIB.haste_gru_grad(x, W, R, bx, br, h, v, grads[0], zoneout_mask)
 
@@ -166,13 +165,13 @@ class GRULayer(tf.Module):
 
     if sequence_length is not None:
       # 0-indexed tensors, so length-1.
-      indices = sequence_length - 1
+      indices = sequence_length
       indices = tf.stack([indices, tf.range(batch_size, dtype=sequence_length.dtype)], axis=-1)
       state = tf.gather_nd(result, indices)
     else:
       state = result[-1]
 
-    return result, state
+    return result[1:], state
 
 
 class GRU(tf.Module):

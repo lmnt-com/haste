@@ -66,27 +66,19 @@ std::vector<Tensor> gru_forward(
         hidden_size,
         at::cuda::getCurrentCUDABlasHandle());
 
-    auto x_a = x.packed_accessor32<scalar_t, 3>();
-    auto output_a = output.packed_accessor32<scalar_t, 3>();
-    auto cache_a = cache.packed_accessor32<scalar_t, 3>();
-    auto tmp_Wx_a = tmp_Wx.packed_accessor32<scalar_t, 3>();
-    auto zoneout_mask_a = zoneout_mask.packed_accessor32<scalar_t, 3>();
-
-    for (auto i = decltype(time_steps){0}; i < time_steps; ++i) {
-      forward.Iterate(
-          kernel.data_ptr<scalar_t>(),
-          recurrent_kernel.data_ptr<scalar_t>(),
-          bias.data_ptr<scalar_t>(),
-          recurrent_bias.data_ptr<scalar_t>(),
-          x_a[i].data(),
-          output_a[i].data(),
-          output_a[i+1].data(),
-          cache_a[i].data(),
-          tmp_Wx_a[i].data(),
-          tmp_Rh.data_ptr<scalar_t>(),
-          has_zoneout ? zoneout_prob : 0.0f,
-          has_zoneout ? zoneout_mask_a[i].data() : nullptr);
-    }
+    forward.Run(
+        time_steps,
+        kernel.data_ptr<scalar_t>(),
+        recurrent_kernel.data_ptr<scalar_t>(),
+        bias.data_ptr<scalar_t>(),
+        recurrent_bias.data_ptr<scalar_t>(),
+        x.data_ptr<scalar_t>(),
+        output.data_ptr<scalar_t>(),
+        cache.data_ptr<scalar_t>(),
+        tmp_Wx.data_ptr<scalar_t>(),
+        tmp_Rh.data_ptr<scalar_t>(),
+        has_zoneout ? zoneout_prob : 0.0f,
+        has_zoneout ? zoneout_mask.data_ptr<scalar_t>() : nullptr);
   }));
 
   return { output, cache };
@@ -99,11 +91,11 @@ std::vector<Tensor> gru_backward(
     Tensor bias,
     Tensor recurrent_bias,
     Tensor zoneout_mask,
-    Tensor h_t,
+    Tensor h,
     Tensor cache,
     Tensor dh_new) {
-  const auto time_steps = x_t.size(0);
-  const auto input_size = x_t.size(1);
+  const auto input_size = x_t.size(0);
+  const auto time_steps = x_t.size(1);
   const auto batch_size = x_t.size(2);
   const auto hidden_size = recurrent_kernel_t.size(1);
   const bool has_zoneout = !!zoneout_mask.size(0);
@@ -113,7 +105,7 @@ std::vector<Tensor> gru_backward(
   CHECK_INPUT(recurrent_kernel_t);
   CHECK_INPUT(bias);
   CHECK_INPUT(recurrent_bias);
-  CHECK_INPUT(h_t);
+  CHECK_INPUT(h);
   CHECK_INPUT(cache);
   CHECK_INPUT(dh_new);
   CHECK_INPUT(zoneout_mask);
@@ -126,7 +118,6 @@ std::vector<Tensor> gru_backward(
   Tensor dh = torch::zeros({ batch_size, hidden_size }, at::kCUDA);
   Tensor dp = torch::empty({ time_steps, batch_size, hidden_size * 3 }, at::kCUDA);
   Tensor dq = torch::empty({ time_steps, batch_size, hidden_size * 3 }, at::kCUDA);
-  Tensor zeros = torch::zeros({ batch_size, hidden_size }, at::kCUDA);
 
   AT_DISPATCH_FLOATING_TYPES(x_t.scalar_type(), "gru_backward", ([&] {
     BackwardPass<scalar_t> backward(
@@ -135,35 +126,25 @@ std::vector<Tensor> gru_backward(
         hidden_size,
         at::cuda::getCurrentCUDABlasHandle());
 
-    auto x_t_a = x_t.packed_accessor32<scalar_t, 3>();
-    auto h_t_a = h_t.packed_accessor32<scalar_t, 3>();
-    auto cache_a = cache.packed_accessor32<scalar_t, 3>();
-    auto dh_new_a = dh_new.packed_accessor32<scalar_t, 3>();
-    auto dx_a = dx.packed_accessor32<scalar_t, 3>();
-    auto dp_a = dp.packed_accessor32<scalar_t, 3>();
-    auto dq_a = dq.packed_accessor32<scalar_t, 3>();
-    auto zoneout_mask_a = zoneout_mask.packed_accessor32<scalar_t, 3>();
-
-    for (auto i = time_steps - 1; i >= 0; --i) {
-      backward.Iterate(
-          kernel_t.data_ptr<scalar_t>(),
-          recurrent_kernel_t.data_ptr<scalar_t>(),
-          bias.data_ptr<scalar_t>(),
-          recurrent_bias.data_ptr<scalar_t>(),
-          x_t_a[i].data(),
-          h_t_a[i].data(),
-          cache_a[i].data(),
-          dh_new_a[i+1].data(),
-          dx_a[i].data(),
-          dW.data_ptr<scalar_t>(),
-          dR.data_ptr<scalar_t>(),
-          dbx.data_ptr<scalar_t>(),
-          dbr.data_ptr<scalar_t>(),
-          dh.data_ptr<scalar_t>(),
-          dp_a[i].data(),
-          dq_a[i].data(),
-          has_zoneout ? zoneout_mask_a[i].data() : nullptr);
-    }
+    backward.Run(
+        time_steps,
+        kernel_t.data_ptr<scalar_t>(),
+        recurrent_kernel_t.data_ptr<scalar_t>(),
+        bias.data_ptr<scalar_t>(),
+        recurrent_bias.data_ptr<scalar_t>(),
+        x_t.data_ptr<scalar_t>(),
+        h.data_ptr<scalar_t>(),
+        cache.data_ptr<scalar_t>(),
+        dh_new.data_ptr<scalar_t>(),
+        dx.data_ptr<scalar_t>(),
+        dW.data_ptr<scalar_t>(),
+        dR.data_ptr<scalar_t>(),
+        dbx.data_ptr<scalar_t>(),
+        dbr.data_ptr<scalar_t>(),
+        dh.data_ptr<scalar_t>(),
+        dp.data_ptr<scalar_t>(),
+        dq.data_ptr<scalar_t>(),
+        has_zoneout ? zoneout_mask.data_ptr<scalar_t>() : nullptr);
   }));
 
   return { dx, dh, dW, dR, dbx, dbr };

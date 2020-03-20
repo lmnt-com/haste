@@ -75,13 +75,39 @@ class ForwardPass {
         const T* x,
         const T* h,
         T* h_out,
-        T* v_out,
+        T* v,
+        T* tmp_Wx,
+        T* tmp_Rh,
+        const float zoneout_prob,
+        const T* zoneout_mask);
+
+    void Run(
+        const int steps,
+        const T* W,
+        const T* R,
+        const T* bx,
+        const T* br,
+        const T* x,
+        T* h,
+        T* v,
         T* tmp_Wx,
         T* tmp_Rh,
         const float zoneout_prob,
         const T* zoneout_mask);
 
   private:
+    void IterateInternal(
+        const T* R,
+        const T* bx,
+        const T* br,
+        const T* h,
+        T* h_out,
+        T* v,
+        T* tmp_Wx,
+        T* tmp_Rh,
+        const float zoneout_prob,
+        const T* zoneout_mask);
+
     struct private_data;
     private_data* data_;
 };
@@ -116,8 +142,8 @@ class BackwardPass {
     // bx: [H*3] the bias vector for the input weight matrix.
     // br: [H*3] the bias vector for the recurrent weight matrix.
     // x_t: [C,N] the transpose of the GRU input for this iteration.
-    // h_t: [H,N] the transpose of the t-1 iteration's `h_out` or the initial hidden state
-    //     if this is the t=0 iteration (typically zeros).
+    // h: [N,H] the t-1 iteration's `h_out` or the initial hidden state if this is the t=0
+    //     iteration (typically zeros).
     // v: [N,H*4] the same vector as returned by ForwardPass::Iterate on its corresponding
     //     iteration.
     // dh_new: [N,H] the gradient of `h_out` with respect to the loss at this iteration.
@@ -146,7 +172,27 @@ class BackwardPass {
         const T* bx,
         const T* br,
         const T* x_t,
-        const T* h_t,
+        const T* h,
+        const T* v,
+        const T* dh_new,
+        T* dx,
+        T* dW,
+        T* dR,
+        T* dbx,
+        T* dbr,
+        T* dh,
+        T* dp,
+        T* dq,
+        const T* zoneout_mask);
+
+    void Run(
+        const int steps,
+        const T* W_t,
+        const T* R_t,
+        const T* bx,
+        const T* br,
+        const T* x_t,
+        const T* h,
         const T* v,
         const T* dh_new,
         T* dx,
@@ -160,6 +206,18 @@ class BackwardPass {
         const T* zoneout_mask);
 
   private:
+    void IterateInternal(
+        const T* R_t,
+        const T* h,
+        const T* v,
+        const T* dh_new,
+        T* dbx,
+        T* dbr,
+        T* dh,
+        T* dp,
+        T* dq,
+        const T* zoneout_mask);
+
     struct private_data;
     private_data* data_;
 };
