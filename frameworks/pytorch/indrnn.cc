@@ -29,21 +29,25 @@ using torch::Tensor;
 
 Tensor indrnn_forward(
     bool training,
+    float zoneout_prob,
     Tensor x,
     Tensor h0,
     Tensor kernel,
     Tensor recurrent_scale,
-    Tensor bias) {
+    Tensor bias,
+    Tensor zoneout_mask) {
   const auto time_steps = x.size(0);
   const auto batch_size = x.size(1);
   const auto input_size = x.size(2);
   const auto hidden_size = recurrent_scale.size(0);
+  const bool has_zoneout = zoneout_prob && zoneout_mask.size(0);
 
   CHECK_INPUT(x);
   CHECK_INPUT(h0);
   CHECK_INPUT(kernel);
   CHECK_INPUT(recurrent_scale);
   CHECK_INPUT(bias);
+  CHECK_INPUT(zoneout_mask);
 
   Tensor output = torch::empty({ time_steps + 1, batch_size, hidden_size }, at::kCUDA);
   Tensor workspace = torch::empty({ time_steps, batch_size, hidden_size }, at::kCUDA);
@@ -65,7 +69,9 @@ Tensor indrnn_forward(
         bias.data_ptr<scalar_t>(),
         x.data_ptr<scalar_t>(),
         output.data_ptr<scalar_t>(),
-        workspace.data_ptr<scalar_t>());
+        workspace.data_ptr<scalar_t>(),
+        has_zoneout ? zoneout_prob : 0.0f,
+        has_zoneout ? zoneout_mask.data_ptr<scalar_t>() : nullptr);
   }));
 
   return output;
@@ -76,17 +82,20 @@ std::vector<Tensor> indrnn_backward(
     Tensor kernel_t,
     Tensor recurrent_scale,
     Tensor bias,
+    Tensor zoneout_mask,
     Tensor h,
     Tensor dh_new) {
   const auto input_size = x_t.size(0);
   const auto time_steps = x_t.size(1);
   const auto batch_size = x_t.size(2);
   const auto hidden_size = recurrent_scale.size(0);
+  const bool has_zoneout = !!zoneout_mask.size(0);
 
   CHECK_INPUT(x_t);
   CHECK_INPUT(kernel_t);
   CHECK_INPUT(recurrent_scale);
   CHECK_INPUT(bias);
+  CHECK_INPUT(zoneout_mask);
   CHECK_INPUT(h);
   CHECK_INPUT(dh_new);
 
@@ -117,7 +126,8 @@ std::vector<Tensor> indrnn_backward(
         du.data_ptr<scalar_t>(),
         db.data_ptr<scalar_t>(),
         dh.data_ptr<scalar_t>(),
-        workspace.data_ptr<scalar_t>());
+        workspace.data_ptr<scalar_t>(),
+        has_zoneout ? zoneout_mask.data_ptr<scalar_t>() : nullptr);
   }));
 
   return { dx, dh, dW, du, db };

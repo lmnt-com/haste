@@ -27,25 +27,32 @@ __all__ = [
 #@torch.jit.script
 def IndRNNScript(
     training: bool,
+    zoneout_prob: float,
     input,
     h0,
     kernel,
     recurrent_scale,
-    bias):
+    bias,
+    zoneout_mask):
   time_steps = input.shape[0]
 
   h = [h0]
   Wx = input @ kernel + bias
   for t in range(time_steps):
     h.append(torch.tanh(Wx[t] + h[-1] * recurrent_scale))
+    if zoneout_prob:
+      if training:
+        h[-1] = (h[-1] - h[-2]) * zoneout_mask[t] + h[-2]
+      else:
+        h[-1] = zoneout_prob * h[-2] + (1 - zoneout_prob) * h[-1]
   h = torch.stack(h)
   return h
 
 
 class IndRNNFunction(torch.autograd.Function):
   @staticmethod
-  def forward(ctx, training, *inputs):
-    h = LIB.indrnn_forward(training, *inputs)
+  def forward(ctx, training, zoneout_prob, *inputs):
+    h = LIB.indrnn_forward(training, zoneout_prob, *inputs)
     ctx.save_for_backward(inputs[0], *inputs[2:], h)
     ctx.training = training
     return h
@@ -58,7 +65,7 @@ class IndRNNFunction(torch.autograd.Function):
     saved[0] = saved[0].permute(2, 0, 1).contiguous()
     saved[1] = saved[1].permute(1, 0).contiguous()
     grads = LIB.indrnn_backward(*saved, grad_h.contiguous())
-    return (None, *grads)
+    return (None, None, *grads, None)
 
 
 class IndRNN(nn.Module):
@@ -66,12 +73,17 @@ class IndRNN(nn.Module):
       self,
       input_size,
       hidden_size,
-      batch_first=False):
+      batch_first=False,
+      zoneout=0.0):
     super(IndRNN, self).__init__()
+
+    if zoneout < 0 or zoneout > 1:
+      raise ValueError('IndRNN: zoneout must be in [0.0, 1.0]')
 
     self.input_size = input_size
     self.hidden_size = hidden_size
     self.batch_first = batch_first
+    self.zoneout = zoneout
 
     self.kernel = nn.Parameter(torch.empty(input_size, hidden_size))
     self.recurrent_scale = nn.Parameter(torch.empty(hidden_size))
@@ -87,6 +99,12 @@ class IndRNN(nn.Module):
     if self.batch_first:
       input = input.permute(1, 0, 2)
 
+    if self.zoneout:
+      zoneout_mask = input.new_empty(input.shape[0], input.shape[1], self.hidden_size)
+      zoneout_mask.bernoulli_(1.0 - self.zoneout)
+    else:
+      zoneout_mask = input.new_empty(0, 0, 0)
+
     if state is None:
       h0 = input.new_zeros(input.shape[1], self.hidden_size)
     elif state.shape[0] != 1:
@@ -94,7 +112,7 @@ class IndRNN(nn.Module):
     else:
       h0 = state[0]
 
-    h = self._impl(input, h0)
+    h = self._impl(input, h0, zoneout_mask)
 
     if lengths is not None:
       cols = range(h.size(1))
@@ -108,7 +126,7 @@ class IndRNN(nn.Module):
 
     return output, state
 
-  def _impl(self, input, state):
+  def _impl(self, input, state, zoneout_mask):
     tensors = [input, self.kernel, self.recurrent_scale, self.bias]
     is_cuda = [tensor.is_cuda for tensor in tensors]
     if any(is_cuda) and not all(is_cuda):
@@ -117,16 +135,20 @@ class IndRNN(nn.Module):
     if all(is_cuda):
       return IndRNNFunction.apply(
         self.training,
+        self.zoneout,
         input.contiguous(),
         state.contiguous(),
         self.kernel.contiguous(),
         self.recurrent_scale.contiguous(),
-        self.bias.contiguous())
+        self.bias.contiguous(),
+        zoneout_mask.contiguous())
     else:
       return IndRNNScript(
         self.training,
+        self.zoneout,
         input.contiguous(),
         state.contiguous(),
         self.kernel.contiguous(),
         self.recurrent_scale.contiguous(),
-        self.bias.contiguous())
+        self.bias.contiguous(),
+        zoneout_mask.contiguous())

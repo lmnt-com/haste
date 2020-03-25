@@ -22,7 +22,7 @@
 
 namespace {
 
-template<typename T>
+template<typename T, bool Training, bool ApplyZoneout>
 __global__
 void IndrnnFwdOps(
     const int batch_size,
@@ -31,7 +31,9 @@ void IndrnnFwdOps(
     const T* u,
     const T* b,
     const T* h,
-    T* h_out) {
+    T* h_out,
+    const float zoneout_prob,
+    const T* zoneout_mask) {
   const int row = blockDim.x * blockIdx.x + threadIdx.x;
   const int col = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -40,7 +42,17 @@ void IndrnnFwdOps(
 
   const int idx = col * hidden_size + row;
   const T a = Wx[idx] + u[row] * h[idx] + b[row];
-  h_out[idx] = tanh(a);
+  T cur_h_value = tanh(a);
+
+  if (ApplyZoneout) {
+    if (Training) {
+      cur_h_value = (cur_h_value - h[idx]) * zoneout_mask[idx] + h[idx];
+    } else {
+      cur_h_value = (zoneout_prob * h[idx]) + ((1.0f - zoneout_prob) * cur_h_value);
+    }
+  }
+
+  h_out[idx] = cur_h_value;
 }
 
 }  // anonymous namespace
@@ -89,10 +101,13 @@ void ForwardPass<T>::Run(
     const T* b,
     const T* x,
     T* h,
-    T* workspace) {
+    T* workspace,
+    const float zoneout_prob,
+    const T* zoneout_mask) {
   static const T alpha = static_cast<T>(1.0);
   static const T beta = static_cast<T>(0.0);
 
+  const bool training = data_->training;
   const int batch_size = data_->batch_size;
   const int input_size = data_->input_size;
   const int hidden_size = data_->hidden_size;
@@ -118,14 +133,55 @@ void ForwardPass<T>::Run(
       (batch_size + blockDim.y - 1) / blockDim.y);
   const int NH = batch_size * hidden_size;
   for (int i = 0; i < steps; ++i) {
-    IndrnnFwdOps<T><<<gridDim, blockDim, 0, stream>>>(
-        batch_size,
-        hidden_size,
-        workspace + i * NH,
-        u,
-        b,
-        h + i * NH,
-        h + (i + 1) * NH);
+    if (training) {
+      if (zoneout_prob && zoneout_mask) {
+        IndrnnFwdOps<T, true, true><<<gridDim, blockDim, 0, stream>>>(
+            batch_size,
+            hidden_size,
+            workspace + i * NH,
+            u,
+            b,
+            h + i * NH,
+            h + (i + 1) * NH,
+            zoneout_prob,
+            zoneout_mask + i * NH);
+      } else {
+        IndrnnFwdOps<T, true, false><<<gridDim, blockDim, 0, stream>>>(
+            batch_size,
+            hidden_size,
+            workspace + i * NH,
+            u,
+            b,
+            h + i * NH,
+            h + (i + 1) * NH,
+            0.0f,
+            nullptr);
+      }
+    } else {
+      if (zoneout_prob && zoneout_mask) {
+        IndrnnFwdOps<T, false, true><<<gridDim, blockDim, 0, stream>>>(
+            batch_size,
+            hidden_size,
+            workspace + i * NH,
+            u,
+            b,
+            h + i * NH,
+            h + (i + 1) * NH,
+            zoneout_prob,
+            zoneout_mask + i * NH);
+      } else {
+        IndrnnFwdOps<T, false, false><<<gridDim, blockDim, 0, stream>>>(
+            batch_size,
+            hidden_size,
+            workspace + i * NH,
+            u,
+            b,
+            h + i * NH,
+            h + (i + 1) * NH,
+            0.0f,
+            nullptr);
+      }
+    }
   }
 
   cublasSetStream(blas_handle, save_stream);

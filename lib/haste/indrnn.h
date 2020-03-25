@@ -41,7 +41,9 @@ class ForwardPass {
         const T* b,
         const T* x,
         T* h,
-        T* workspace);
+        T* workspace,
+        const float zoneout_prob,
+        const T* zoneout_mask);
 
   private:
     struct private_data;
@@ -72,7 +74,8 @@ class BackwardPass {
         T* du,
         T* db,
         T* dh,
-        T* workspace);
+        T* workspace,
+        const T* zoneout_mask);
 
   private:
     struct private_data;
