@@ -60,5 +60,5 @@ benchmarks: haste
 	$(CXX) -std=c++11 benchmarks/benchmark_gru.cc libhaste.a $(LOCAL_CFLAGS) $(LOCAL_LDFLAGS) -o benchmark_gru -Wno-ignored-attributes -lcudnn
 
 clean:
-	rm -fr benchmark_lstm haste_lstm haste_gru build haste_*.whl
+	rm -fr benchmark_lstm benchmark_gru haste_lstm haste_gru build haste_*.whl
 	find . \( -iname '*.o' -o -iname '*.so' -o -iname '*.a' \) -delete
