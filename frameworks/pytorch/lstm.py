@@ -21,6 +21,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .base_rnn import BaseRNN
+
 
 __all__ = [
     'LSTM'
@@ -86,7 +88,7 @@ class LSTMFunction(torch.autograd.Function):
     return (None, None, *grads, None)
 
 
-class LSTM(nn.Module):
+class LSTM(BaseRNN):
   """
   Long Short-Term Memory layer.
 
@@ -134,19 +136,15 @@ class LSTM(nn.Module):
         `i,g,f,o` gate layout. The forget gate biases are initialized to
         `forget_bias` and the rest are zeros.
     """
-    super(LSTM, self).__init__()
+    super().__init__(input_size, hidden_size, batch_first, zoneout)
 
     if dropout < 0 or dropout > 1:
       raise ValueError('LSTM: dropout must be in [0.0, 1.0]')
     if zoneout < 0 or zoneout > 1:
       raise ValueError('LSTM: zoneout must be in [0.0, 1.0]')
 
-    self.input_size = input_size
-    self.hidden_size = hidden_size
-    self.batch_first = batch_first
     self.forget_bias = forget_bias
     self.dropout = dropout
-    self.zoneout = zoneout
 
     self.kernel = nn.Parameter(torch.empty(input_size, hidden_size * 4))
     self.recurrent_kernel = nn.Parameter(torch.empty(hidden_size, hidden_size * 4))
@@ -228,47 +226,17 @@ class LSTM(nn.Module):
       (h_n, c_n): the hidden and cell states, respectively, for the last
         sequence item. Dimensions (1, batch_size, hidden_size).
     """
-    if self.batch_first:
-      input = input.permute(1, 0, 2)
-
-    if self.zoneout:
-      zoneout_mask = input.new_empty(input.shape[0], input.shape[1], self.hidden_size)
-      zoneout_mask.bernoulli_(1.0 - self.zoneout)
-    else:
-      zoneout_mask = input.new_empty(0)
-
-    if state is None:
-      h0 = input.new_zeros(input.shape[1], self.hidden_size)
-      c0 = torch.zeros_like(h0)
-      state = (h0, c0)
-    elif not isinstance(state, (list, tuple)) or len(state) != 2:
-      raise ValueError('initial state for LSTM must be length-2 list or tuple (h_0, c_0)')
-    elif state[0].shape[0] != 1 or state[1].shape[0] != 1:
-      raise ValueError('initial state for LSTM must have leading dimension of 1')
-    else:
-      h0, c0 = state[0][0], state[1][0]
-
-    h, c = self._impl(input, (h0, c0), zoneout_mask)
-
-    if lengths is not None:
-      cols = range(h.size(1))
-      state = (h[[lengths, cols]].unsqueeze(0), c[[lengths, cols]].unsqueeze(0))
-    else:
-      state = (h[-1].unsqueeze(0), c[-1].unsqueeze(0))
-
-    output = h[1:]
-    if self.batch_first:
-      output = output.permute(1, 0, 2)
-
+    input = self._permute(input)
+    state_shape = [1, input.shape[1], self.hidden_size]
+    state_shape = (state_shape, state_shape)
+    h0, c0 = self._get_state(input, state, state_shape)
+    h, c = self._impl(input, (h0[0], c0[0]), self._get_zoneout_mask(input))
+    state = self._get_final_state((h, c), lengths)
+    output = self._permute(h[1:])
     return output, state
 
   def _impl(self, input, state, zoneout_mask):
-    tensors = [input, self.kernel, self.recurrent_kernel, self.bias]
-    is_cuda = [tensor.is_cuda for tensor in tensors]
-    if any(is_cuda) and not all(is_cuda):
-      raise ValueError('LSTM tensors should all be CUDA tensors or none should be CUDA tensors')
-
-    if all(is_cuda):
+    if self._is_cuda():
       return LSTMFunction.apply(
           self.training,
           self.zoneout,

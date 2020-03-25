@@ -21,6 +21,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .base_rnn import BaseRNN
+
 
 __all__ = [
     'GRU'
@@ -86,7 +88,7 @@ class GRUFunction(torch.autograd.Function):
     return (None, None, *grads, None)
 
 
-class GRU(nn.Module):
+class GRU(BaseRNN):
   """
   Gated Recurrent Unit layer.
 
@@ -136,18 +138,14 @@ class GRU(nn.Module):
       recurrent_bias: the recurrent projection bias vector. Dimensions
         (hidden_size * 3) with `z,r,h` gate layout. Initialized to zeros.
     """
-    super(GRU, self).__init__()
+    super().__init__(input_size, hidden_size, batch_first, zoneout)
 
     if dropout < 0 or dropout > 1:
       raise ValueError('GRU: dropout must be in [0.0, 1.0]')
     if zoneout < 0 or zoneout > 1:
       raise ValueError('GRU: zoneout must be in [0.0, 1.0]')
 
-    self.input_size = input_size
-    self.hidden_size = hidden_size
-    self.batch_first = batch_first
     self.dropout = dropout
-    self.zoneout = zoneout
 
     self.kernel = nn.Parameter(torch.empty(input_size, hidden_size * 3))
     self.recurrent_kernel = nn.Parameter(torch.empty(hidden_size, hidden_size * 3))
@@ -235,43 +233,16 @@ class GRU(nn.Module):
       h_n: the hidden state for the last sequence item. Dimensions
         (1, batch_size, hidden_size).
     """
-    if self.batch_first:
-      input = input.permute(1, 0, 2)
-
-    if self.zoneout:
-      zoneout_mask = input.new_empty(input.shape[0], input.shape[1], self.hidden_size)
-      zoneout_mask.bernoulli_(1.0 - self.zoneout)
-    else:
-      zoneout_mask = input.new_empty(0, 0, 0)
-
-    if state is None:
-      state = input.new_zeros(input.shape[1], self.hidden_size)
-    elif state.shape[0] != 1:
-      raise ValueError('initial state for GRU must have leading dimension of 1')
-    else:
-      state = state[0]
-
-    h = self._impl(input, state, zoneout_mask)
-
-    if lengths is not None:
-      cols = range(h.size(1))
-      state = h[[lengths, cols]].unsqueeze(0)
-    else:
-      state = h[-1].unsqueeze(0)
-
-    output = h[1:]
-    if self.batch_first:
-      output = output.permute(1, 0, 2)
-
+    input = self._permute(input)
+    state_shape = [1, input.shape[1], self.hidden_size]
+    h0 = self._get_state(input, state, state_shape)
+    h = self._impl(input, h0[0], self._get_zoneout_mask(input))
+    state = self._get_final_state(h, lengths)
+    output = self._permute(h[1:])
     return output, state
 
   def _impl(self, input, state, zoneout_mask):
-    tensors = [input, self.kernel, self.recurrent_kernel, self.bias]
-    is_cuda = [tensor.is_cuda for tensor in tensors]
-    if any(is_cuda) and not all(is_cuda):
-      raise ValueError('GRU tensors should all be CUDA tensors or none should be CUDA tensors')
-
-    if all(is_cuda):
+    if self._is_cuda():
       return GRUFunction.apply(
           self.training,
           self.zoneout,
