@@ -36,21 +36,25 @@ using tensorflow::shape_inference::ShapeHandle;
 REGISTER_OP("HasteIndrnn")
     .Attr("R: {float, double}")         // Some real number type.
     .Attr("training: bool")
+    .Attr("zoneout_prob: float")
     .Input("x: R")                      // [T,N,C]
     .Input("kernel: R")                 // [C,H]
     .Input("recurrent_scale: R")        // [H]
     .Input("bias: R")                   // [H]
+    .Input("zoneout_mask: R")           // [T,N,H]
     .Output("h: R")                     // [T+1,N,H]
     .SetShapeFn([](InferenceContext* c) {
       ShapeHandle input_shape;
       ShapeHandle kernel_shape;
       ShapeHandle recurrent_shape;
       ShapeHandle bias_shape;
+      ShapeHandle zoneout_mask_shape;
 
       TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 3, &input_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 2, &kernel_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 1, &recurrent_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 1, &bias_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 3, &zoneout_mask_shape));
 
       const DimensionHandle time_steps = c->Dim(input_shape, 0);
       const DimensionHandle batch_size = c->Dim(input_shape, 1);
@@ -65,18 +69,23 @@ REGISTER_OP("HasteIndrnn")
 
 template<typename T>
 struct HasteIndrnnOp : public OpKernel {
-  explicit HasteIndrnnOp(OpKernelConstruction* context) : OpKernel(context) {}
+  explicit HasteIndrnnOp(OpKernelConstruction* context) : OpKernel(context) {
+    OP_REQUIRES_OK(context, context->GetAttr("training", &training_));
+    OP_REQUIRES_OK(context, context->GetAttr("zoneout_prob", &zoneout_prob_));
+  }
 
   void Compute(OpKernelContext* context) override {
     const Tensor& input = context->input(0);
     const Tensor& kernel = context->input(1);
     const Tensor& recurrent_scale = context->input(2);
     const Tensor& bias = context->input(3);
+    const Tensor& zoneout_mask = context->input(4);
 
     const auto time_steps = input.shape().dim_size(0);
     const auto batch_size = input.shape().dim_size(1);
     const auto input_size = input.shape().dim_size(2);
     const auto hidden_size = recurrent_scale.shape().dim_size(0);
+    const bool has_zoneout = zoneout_prob_ && zoneout_mask.NumElements();
     const auto data_type = DataTypeToEnum<T>::value;
 
     const TensorShape output_shape = { time_steps + 1, batch_size, hidden_size };
@@ -90,7 +99,7 @@ struct HasteIndrnnOp : public OpKernel {
     cudaMemset(output->flat<T>().data(), 0, output->AllocatedBytes());
 
     ForwardPass<T> forward(
-        true,
+        training_,
         batch_size,
         input_size,
         hidden_size,
@@ -103,8 +112,14 @@ struct HasteIndrnnOp : public OpKernel {
         bias.flat<T>().data(),
         input.flat<T>().data(),
         output->flat<T>().data(),
-        workspace.flat<T>().data());
+        workspace.flat<T>().data(),
+        has_zoneout ? zoneout_prob_ : 0.0f,
+        has_zoneout ? zoneout_mask.flat<T>().data() : nullptr);
   }
+
+  private:
+    bool training_;
+    float zoneout_prob_;
 };
 
 REGISTER_GPU_KERNEL(HasteIndrnn, float);
@@ -116,6 +131,7 @@ REGISTER_OP("HasteIndrnnGrad")
     .Input("kernel_t: R")              // [4,C]
     .Input("recurrent_scale: R")       // [H]
     .Input("bias: R")                  // [H]
+    .Input("zoneout_mask: R")          // [T,N,H]
     .Input("h: R")                     // [T+1,N,H]
     .Input("dh_new: R")                // [T+1,N,H]
     .Output("dx: R")                   // [T,N,C]
@@ -127,6 +143,7 @@ REGISTER_OP("HasteIndrnnGrad")
       ShapeHandle kernel_shape;
       ShapeHandle recurrent_shape;
       ShapeHandle bias_shape;
+      ShapeHandle zoneout_mask_shape;
       ShapeHandle h_shape;
       ShapeHandle dh_new_shape;
 
@@ -134,8 +151,9 @@ REGISTER_OP("HasteIndrnnGrad")
       TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 2, &kernel_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 1, &recurrent_shape));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 1, &bias_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 3, &h_shape));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(5), 3, &dh_new_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 3, &zoneout_mask_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(5), 3, &h_shape));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(6), 3, &dh_new_shape));
 
       DimensionHandle input_size = c->Dim(x_shape, 0);
       DimensionHandle time_steps = c->Dim(x_shape, 1);
@@ -158,13 +176,15 @@ struct HasteIndrnnGradOp : public OpKernel {
     const Tensor& kernel = context->input(1);
     const Tensor& recurrent_scale = context->input(2);
     const Tensor& bias = context->input(3);
-    const Tensor& h_vector = context->input(4);
-    const Tensor& dh_new = context->input(5);
+    const Tensor& zoneout_mask = context->input(4);
+    const Tensor& h_vector = context->input(5);
+    const Tensor& dh_new = context->input(6);
 
     const auto input_size = input.shape().dim_size(0);
     const auto time_steps = input.shape().dim_size(1);
     const auto batch_size = input.shape().dim_size(2);
     const auto hidden_size = recurrent_scale.shape().dim_size(0);
+    const bool has_zoneout = !!zoneout_mask.NumElements();
     const auto data_type = DataTypeToEnum<T>::value;
 
     // Can be uninitialized. Output only, no accumulation.
@@ -220,7 +240,8 @@ struct HasteIndrnnGradOp : public OpKernel {
         du->flat<T>().data(),
         db->flat<T>().data(),
         dh.flat<T>().data(),
-        workspace.flat<T>().data());
+        workspace.flat<T>().data(),
+        has_zoneout ? zoneout_mask.flat<T>().data() : nullptr);
   }
 };
 
