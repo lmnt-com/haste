@@ -117,6 +117,7 @@ The C++ API is documented in [`lib/haste/*.h`](lib/haste/) and there are code sa
 - [`frameworks/tf/`](frameworks/tf): TensorFlow Python API and custom op code
 - [`frameworks/pytorch/`](frameworks/pytorch): PyTorch API and custom op code
 - [`lib/`](lib): CUDA kernels and C++ API
+- [`validation/`](validation): scripts to validate output and gradients of RNN layers
 
 ## Implementation notes
 - the GRU implementation is based on `1406.1078v1` (same as cuDNN) rather than `1406.1078v3`
