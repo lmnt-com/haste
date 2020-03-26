@@ -94,7 +94,7 @@ class IndRNN(BaseRNN):
 
   def reset_parameters(self):
     nn.init.xavier_uniform_(self.kernel)
-    nn.init.uniform_(self.recurrent_scale, -1.0, 1.0)
+    nn.init.uniform_(self.recurrent_scale, -0.5, 0.5)
     nn.init.zeros_(self.bias)
 
   def forward(self, input, state=None, lengths=None):
