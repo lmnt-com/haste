@@ -20,6 +20,7 @@ import pkg_resources
 import tensorflow as tf
 
 from tensorflow.compat import v1
+from .base_rnn import BaseRNN
 
 
 __all__ = [
@@ -28,24 +29,6 @@ __all__ = [
 
 
 LIB = tf.load_op_library(pkg_resources.resource_filename(__name__, 'libhaste_tf.so'))
-
-
-def reverse_sequence(sequence, sequence_length):
-  """
-  Reverses a batched sequence in time-major order [T,N,...]. The input sequence
-  may be padded, in which case sequence_length specifies the unpadded length of
-  each sequence.
-  """
-  if sequence_length is None:
-    return tf.reverse(sequence, axis=[0])
-  return tf.reverse_sequence(sequence, sequence_length, seq_axis=0, batch_axis=1)
-
-
-def transpose(tensor_or_tuple, perm):
-  """Transposes the given tensor or tuple of tensors by the same permutation."""
-  if isinstance(tensor_or_tuple, tuple):
-    return tuple([tf.transpose(tensor, perm) for tensor in tensor_or_tuple])
-  return tf.transpose(tensor_or_tuple, perm)
 
 
 @tf.RegisterGradient("HasteGru")
@@ -174,7 +157,7 @@ class GRULayer(tf.Module):
     return result[1:], state
 
 
-class GRU(tf.Module):
+class GRU(BaseRNN):
   """
   Gated Recurrent Unit layer.
 
@@ -213,82 +196,4 @@ class GRU(tf.Module):
       dtype: (optional) the data type for this layer. Defaults to `tf.float32`.
       name: (optional) string, the name for this layer.
     """
-    assert direction in ['unidirectional', 'bidirectional']
-
-    if direction == 'bidirectional':
-      name = kwargs.pop('name', None)
-      super(GRU, self).__init__(name)
-      self.realname = name
-      self.fwd_gru = GRULayer(num_units, name='fw', **kwargs)
-      self.bwd_gru = GRULayer(num_units, name='bw', **kwargs)
-    else:
-      super(GRU, self).__init__()
-      self.fwd_gru = GRULayer(num_units, **kwargs)
-      self.bwd_gru = None
-
-  def build(self, shape):
-    """
-    Creates the variables of the layer.
-
-    Calling this method is optional for users of the GRU class. It is called
-    internally with the correct shape when `__call__` is invoked.
-
-    Arguments:
-        shape: instance of `TensorShape`.
-    """
-    if self.bwd_gru is not None:
-      with self.name_scope, v1.variable_scope(self.realname, 'gru_cell'):
-        self.fwd_gru.build(shape)
-        self.bwd_gru.build(shape)
-    else:
-      self.fwd_gru.build(shape)
-
-  @property
-  def output_size(self):
-    if self.bwd_gru is not None:
-      return self.fwd_gru.output_size, self.bwd_gru.output_size
-    return self.fwd_gru.output_size
-
-  @property
-  def state_size(self):
-    if self.bwd_gru is not None:
-      return self.fwd_gru.state_size, self.bwd_gru.state_size
-    return self.fwd_gru.state_size
-
-  def __call__(self, inputs, training, sequence_length=None, time_major=False):
-    """
-    Runs the GRU layer.
-
-    Arguments:
-      inputs: Tensor, a rank 3 input tensor with shape [N,T,C] if `time_major`
-        is `False`, or with shape [T,N,C] if `time_major` is `True`.
-      training: bool, `True` if running in training mode, `False` if running
-        in inference mode.
-      sequence_length: (optional) Tensor, a rank 1 tensor with shape [N] and
-        dtype of `tf.int32` or `tf.int64`. This tensor specifies the unpadded
-        length of each example in the input minibatch.
-      time_major: (optional) bool, specifies whether `input` has shape [N,T,C]
-        (`time_major=False`) or shape [T,N,C] (`time_major=True`).
-
-    Returns:
-      A pair, `(output, state)` for unidirectional layers, or a pair
-      `([output_fwd, output_bwd], [state_fwd, state_bwd])` for bidirectional
-      layers.
-    """
-    self.build(inputs.shape)
-
-    if not time_major:
-      inputs = transpose(inputs, [1, 0, 2])
-
-    result, state = self.fwd_gru(inputs, sequence_length, training)
-
-    if self.bwd_gru is not None:
-      inputs = reverse_sequence(inputs, sequence_length)
-      bwd_result, bwd_state = self.bwd_gru(inputs, sequence_length, training)
-      result = result, reverse_sequence(bwd_result, sequence_length)
-      state = state, bwd_state
-
-    if not time_major:
-      result = transpose(result, [1, 0, 2])
-
-    return result, state
+    super().__init__(GRULayer, num_units, direction, 'gru_cell', **kwargs)

@@ -22,6 +22,8 @@ import tensorflow as tf
 from tensorflow.compat import v1
 from tensorflow.compat.v1.nn import rnn_cell
 
+from .base_rnn import BaseRNN
+
 
 __all__ = [
     'LSTM'
@@ -29,24 +31,6 @@ __all__ = [
 
 
 LIB = tf.load_op_library(pkg_resources.resource_filename(__name__, 'libhaste_tf.so'))
-
-
-def reverse_sequence(sequence, sequence_length):
-  """
-  Reverses a batched sequence in time-major order [T,N,...]. The input sequence
-  may be padded, in which case sequence_length specifies the unpadded length of
-  each sequence.
-  """
-  if sequence_length is None:
-    return tf.reverse(sequence, axis=[0])
-  return tf.reverse_sequence(sequence, sequence_length, seq_axis=0, batch_axis=1)
-
-
-def transpose(tensor_or_tuple, perm):
-  """Transposes the given tensor or tuple of tensors by the same permutation."""
-  if isinstance(tensor_or_tuple, tuple):
-    return tuple([tf.transpose(tensor, perm) for tensor in tensor_or_tuple])
-  return tf.transpose(tensor_or_tuple, perm)
 
 
 @tf.RegisterGradient("HasteLstm")
@@ -219,7 +203,7 @@ class LSTMLayer(tf.Module):
     return h[1:], state
 
 
-class LSTM(tf.Module):
+class LSTM(BaseRNN):
   """
   Long Short-Term Memory layer.
 
@@ -266,82 +250,4 @@ class LSTM(tf.Module):
         model. It's currently not possible to train a model with
         `cudnn_compat=True` and restore it with CudnnLSTM. Defaults to `False`.
     """
-    assert direction in ['unidirectional', 'bidirectional']
-
-    if direction == 'bidirectional':
-      name = kwargs.pop('name', None)
-      super(LSTM, self).__init__(name)
-      self.realname = name
-      self.fwd_lstm = LSTMLayer(num_units, name='fw', **kwargs)
-      self.bwd_lstm = LSTMLayer(num_units, name='bw', **kwargs)
-    else:
-      super(LSTM, self).__init__()
-      self.fwd_lstm = LSTMLayer(num_units, **kwargs)
-      self.bwd_lstm = None
-
-  def build(self, shape):
-    """
-    Creates the variables of the layer.
-
-    Calling this method is optional for users of the LSTM class. It is called
-    internally with the correct shape when `__call__` is invoked.
-
-    Arguments:
-        shape: instance of `TensorShape`.
-    """
-    if self.bwd_lstm is not None:
-      with self.name_scope, v1.variable_scope(self.realname, 'lstm_cell'):
-        self.fwd_lstm.build(shape)
-        self.bwd_lstm.build(shape)
-    else:
-      self.fwd_lstm.build(shape)
-
-  @property
-  def output_size(self):
-    if self.bwd_lstm is not None:
-      return self.fwd_lstm.output_size, self.bwd_lstm.output_size
-    return self.fwd_lstm.output_size
-
-  @property
-  def state_size(self):
-    if self.bwd_lstm is not None:
-      return self.fwd_lstm.state_size, self.bwd_lstm.state_size
-    return self.fwd_lstm.state_size
-
-  def __call__(self, inputs, training, sequence_length=None, time_major=False):
-    """
-    Runs the LSTM layer.
-
-    Arguments:
-      inputs: Tensor, a rank 3 input tensor with shape [N,T,C] if `time_major`
-        is `False`, or with shape [T,N,C] if `time_major` is `True`.
-      training: bool, `True` if running in training mode, `False` if running
-        in inference mode.
-      sequence_length: (optional) Tensor, a rank 1 tensor with shape [N] and
-        dtype of `tf.int32` or `tf.int64`. This tensor specifies the unpadded
-        length of each example in the input minibatch.
-      time_major: (optional) bool, specifies whether `input` has shape [N,T,C]
-        (`time_major=False`) or shape [T,N,C] (`time_major=True`).
-
-    Returns:
-      A pair, `(output, state)` for unidirectional layers, or a pair
-      `([output_fwd, output_bwd], [state_fwd, state_bwd])` for bidirectional
-      layers. Each state object will be an instance of `LSTMStateTuple`.
-    """
-    self.build(inputs.shape)
-
-    if not time_major:
-      inputs = transpose(inputs, [1, 0, 2])
-
-    result, state = self.fwd_lstm(inputs, sequence_length, training)
-
-    if self.bwd_lstm is not None:
-      inputs = reverse_sequence(inputs, sequence_length)
-      bwd_result, bwd_state = self.bwd_lstm(inputs, sequence_length, training)
-      result = result, reverse_sequence(bwd_result, sequence_length)
-      state = state, bwd_state
-
-    if not time_major:
-      result = transpose(result, [1, 0, 2])
-
-    return result, state
+    super().__init__(LSTMLayer, num_units, direction, 'lstm_cell', **kwargs)
