@@ -64,6 +64,10 @@ class GRULayer(tf.Module):
         kernel_initializer=None,
         recurrent_initializer=None,
         bias_initializer=None,
+        kernel_transform=None,
+        recurrent_transform=None,
+        bias_transform=None,
+        recurrent_bias_transform=None,
         dropout=0.0,
         zoneout=0.0,
         dtype=None,
@@ -76,13 +80,15 @@ class GRULayer(tf.Module):
     self.recurrent_initializer = recurrent_initializer or v1.initializers.orthogonal()
     self.bias_initializer = bias_initializer or v1.initializers.zeros()
 
+    identity = lambda x: x
+    self.kernel_transform = kernel_transform or identity
+    self.recurrent_transform = recurrent_transform or identity
+    self.bias_transform = bias_transform or identity
+    self.recurrent_bias_transform = recurrent_bias_transform or identity
+
     self.dropout = dropout
     self.zoneout = zoneout
     self.dtype = dtype or tf.float32
-    self.kernel = None
-    self.recurrent_kernel = None
-    self.bias = None
-    self.recurrent_bias = None
     self.built = False
 
   def build(self, shape):
@@ -113,11 +119,18 @@ class GRULayer(tf.Module):
     with self.name_scope, v1.variable_scope(self.realname, 'gru_cell'):
       self._kernel = v1.get_variable('kernel', initializer=weights)
       self._bias = v1.get_variable('bias', initializer=biases)
-
-    self.kernel, self.recurrent_kernel = tf.split(self._kernel, [input_size, num_units], axis=0)
-    self.bias, self.recurrent_bias = tf.split(self._bias, 2, axis=0)
-
     self.built = True
+
+  def get_weights(self):
+    input_size = self._kernel.shape.as_list()[0] - self.num_units
+    kernel, recurrent_kernel = tf.split(self._kernel, [input_size, self.num_units], axis=0)
+    bias, recurrent_bias = tf.split(self._bias, 2, axis=0)
+    return {
+        'kernel': self.kernel_transform(kernel),
+        'recurrent_kernel': self.recurrent_transform(recurrent_kernel),
+        'bias': self.bias_transform(bias),
+        'recurrent_bias': self.recurrent_bias_transform(recurrent_bias)
+    }
 
   def __call__(self, inputs, sequence_length, training):
     self.build(inputs.shape)
@@ -135,13 +148,13 @@ class GRULayer(tf.Module):
       zoneout_mask += tf.random_uniform([time_steps, batch_size, self.num_units], dtype=self.dtype)
       zoneout_mask = tf.floor(zoneout_mask)
 
-    recurrent_kernel = tf.nn.dropout(self.recurrent_kernel, rate=self.dropout)
+    weights = self.get_weights()
     result, _ = LIB.haste_gru(
         inputs,
-        self.kernel,
-        recurrent_kernel,
-        self.bias,
-        self.recurrent_bias,
+        weights['kernel'],
+        tf.nn.dropout(weights['recurrent_kernel'], rate=self.dropout),
+        weights['bias'],
+        weights['recurrent_bias'],
         zoneout_mask,
         training=training,
         zoneout_prob=self.zoneout)
@@ -189,6 +202,18 @@ class GRU(BaseRNN):
       bias_initializer: (optional) the initializer to use for both input and
         recurrent bias vectors. Defaults to `zeros` unless `forget_bias` is
         non-zero (see below).
+      kernel_transform: (optional) a function with signature
+        `(kernel: Tensor) -> Tensor` that transforms the kernel before it is
+        used. Defaults to the identity function.
+      recurrent_transform: (optional) a function with signature
+        `(recurrent_kernel: Tensor) -> Tensor` that transforms the recurrent
+        kernel before it is used. Defaults to the identity function.
+      bias_transform: (optional) a function with signature
+        `(bias: Tensor) -> Tensor` that transforms the bias before it is used.
+        Defaults to the identity function.
+      recurrent_bias_transform: (optional) a function with signature
+        `(recurrent_bias: Tensor) -> Tensor` that transforms the recurrent bias
+        before it is used. Defaults to the identity function.
       dropout: (optional) float, sets the dropout rate for DropConnect
         regularization on the recurrent matrix. Defaults to 0.
       zoneout: (optional) float, sets the zoneout rate for Zoneout

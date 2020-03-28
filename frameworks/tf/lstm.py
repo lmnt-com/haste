@@ -73,6 +73,7 @@ class LSTMLayer(tf.Module):
         cudnn_compat=False):
     super(LSTMLayer, self).__init__(name)
     self.realname = name
+    self.input_size = None
     self.num_units = num_units
 
     self.kernel_initializer = kernel_initializer or v1.initializers.glorot_uniform()
@@ -84,8 +85,8 @@ class LSTMLayer(tf.Module):
     self.zoneout = zoneout
     self.dtype = dtype or tf.float32
     self.cudnn_compat = cudnn_compat
+    self.opaque = None
     self.kernel = None
-    self.recurrent_kernel = None
     self.bias = None
     self.built = False
 
@@ -112,52 +113,62 @@ class LSTMLayer(tf.Module):
     recurrent_weights = tf.concat(recurrent_weights, axis=-1)
     biases = tf.concat(biases, axis=-1)
 
-    # Use the same format as LSTMBlockCell.
     if not self.cudnn_compat:
+      # Use the same format as LSTMBlockCell.
       with self.name_scope, v1.variable_scope(self.realname, 'lstm_cell'):
         weights = tf.concat([kernel_weights, recurrent_weights], axis=0)
-        self._kernel = v1.get_variable('kernel', initializer=weights)
-        self.kernel, self.recurrent_kernel = tf.split(self._kernel, [input_size, num_units], axis=0)
+        self.kernel = v1.get_variable('kernel', initializer=weights)
         self.bias = v1.get_variable('bias', initializer=biases)
-        self.built = True
-        return
+    else:
+      # Use the same format as CudnnLSTM.
+      with self.name_scope, v1.variable_scope(self.realname, 'lstm_cell'):
+        with v1.variable_scope('cudnn_lstm'):
+          # Sigh, cuDNN uses two bias vectors instead of just one.
+          extra_biases = [self.bias_initializer(tf.TensorShape([num_units]), dtype=self.dtype) for _ in range(4)]
+          extra_biases = tf.concat(extra_biases, axis=-1)
+          kernel_weights = tf.reshape(kernel_weights, [-1])
+          recurrent_weights = tf.reshape(recurrent_weights, [-1])
+          opaque_initial_value = tf.concat([kernel_weights, recurrent_weights, biases, extra_biases], axis=-1)
+          self.opaque = v1.get_variable('opaque_kernel', initializer=opaque_initial_value)
 
-    # Use the same format as CudnnLSTM.
-    with self.name_scope, v1.variable_scope(self.realname, 'lstm_cell'):
-      with v1.variable_scope('cudnn_lstm'):
-        # Sigh, cuDNN uses two bias vectors instead of just one.
-        extra_biases = [self.bias_initializer(tf.TensorShape([num_units]), dtype=self.dtype) for _ in range(4)]
-        extra_biases = tf.concat(extra_biases, axis=-1)
-        kernel_weights = tf.reshape(kernel_weights, [-1])
-        recurrent_weights = tf.reshape(recurrent_weights, [-1])
-        opaque_initial_value = tf.concat([kernel_weights, recurrent_weights, biases, extra_biases], axis=-1)
-        self.opaque = v1.get_variable('opaque_kernel', initializer=opaque_initial_value)
-
-    # Split into 3 variables.
-    W_size = 4 * input_size * num_units
-    R_size = 4 * num_units * num_units
-    b_size = 8 * num_units
-    kernel, recurrent_kernel, bias = tf.split(opaque, [W_size, R_size, b_size])
-
-    # Convert from cuDNN [i, f, g, o] format to TF and LMNT [i, g, f, o] format.
-    # Note that we only use a single bias vector so we sum the two separate ones
-    # and then reorder formats.
-    Wi, Wf, Wg, Wo = tf.split(kernel, 4)
-    Ri, Rf, Rg, Ro = tf.split(recurrent_kernel, 4)
-    bi, bf, bg, bo = tf.split(tf.reduce_sum(tf.split(bias, 2), axis=0), 4)
-    kernel = tf.concat([Wi, Wg, Wf, Wo], axis=0)
-    recurrent_kernel = tf.concat([Ri, Rg, Rf, Ro], axis=0)
-    bias = tf.concat([bi, bg, bf, bo], axis=0)
-
-    # Shape them correctly.
-    self.kernel = tf.reshape(kernel, [4 * num_units, input_size])
-    self.recurrent_kernel = tf.reshape(recurrent_kernel, [4 * num_units, num_units])
-    self.bias = tf.reshape(bias, [4 * num_units])
-
-    # Pre-transpose the kernels.
-    self.kernel = tf.transpose(self.kernel, [1, 0])
-    self.recurrent_kernel = tf.transpose(self.recurrent_kernel, [1, 0])
+    self.input_size = input_size
     self.built = True
+
+  def get_weights(self):
+    if self.cudnn_compat:
+      # Split into 3 variables.
+      W_size = 4 * self.input_size * self.num_units
+      R_size = 4 * self.num_units * self.num_units
+      b_size = 8 * self.num_units
+      kernel, recurrent_kernel, bias = tf.split(opaque, [W_size, R_size, b_size])
+
+      # Convert from cuDNN [i, f, g, o] format to TF and LMNT [i, g, f, o] format.
+      # Note that we only use a single bias vector so we sum the two separate ones
+      # and then reorder formats.
+      Wi, Wf, Wg, Wo = tf.split(kernel, 4)
+      Ri, Rf, Rg, Ro = tf.split(recurrent_kernel, 4)
+      bi, bf, bg, bo = tf.split(tf.reduce_sum(tf.split(bias, 2), axis=0), 4)
+      kernel = tf.concat([Wi, Wg, Wf, Wo], axis=0)
+      recurrent_kernel = tf.concat([Ri, Rg, Rf, Ro], axis=0)
+      bias = tf.concat([bi, bg, bf, bo], axis=0)
+
+      # Shape them correctly.
+      kernel = tf.reshape(kernel, [4 * self.num_units, self.input_size])
+      recurrent_kernel = tf.reshape(recurrent_kernel, [4 * self.num_units, self.num_units])
+      bias = tf.reshape(bias, [4 * self.num_units])
+
+      # Pre-transpose the kernels.
+      kernel = tf.transpose(kernel, [1, 0])
+      recurrent_kernel = tf.transpose(recurrent_kernel, [1, 0])
+    else:
+      kernel = self.kernel[:-self.num_units]
+      recurrent_kernel = self.kernel[-self.num_units:]
+      bias = self.bias
+    return {
+        'kernel': kernel,
+        'recurrent_kernel': recurrent_kernel,
+        'bias': bias
+    }
 
   @property
   def state_size(self):
@@ -183,12 +194,12 @@ class LSTMLayer(tf.Module):
       zoneout_mask += tf.random_uniform([time_steps, batch_size, self.num_units], dtype=self.dtype)
       zoneout_mask = tf.floor(zoneout_mask)
 
-    recurrent_kernel = tf.nn.dropout(self.recurrent_kernel, rate=self.dropout)
+    weights = self.get_weights()
     h, c, _ = LIB.haste_lstm(
         x,
-        self.kernel,
-        recurrent_kernel,
-        self.bias,
+        weights['kernel'],
+        tf.nn.dropout(weights['recurrent_kernel'], rate=self.dropout),
+        weights['bias'],
         zoneout_mask,
         training=training,
         zoneout_prob=self.zoneout)

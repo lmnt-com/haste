@@ -45,18 +45,20 @@ def NativeLSTMBuilder(hidden_size):
 
 
 def NativeGRUWeights(native_gru, haste_gru):
-  native_gru.variables[0].assign(haste_gru.fw_layer.kernel)
-  native_gru.variables[1].assign(haste_gru.fw_layer.recurrent_kernel)
-  native_gru.variables[2].assign(tf.stack([haste_gru.fw_layer.bias, haste_gru.fw_layer.recurrent_bias], axis=0))
+  weights = haste_gru.fw_layer.get_weights()
+  native_gru.variables[0].assign(weights['kernel'])
+  native_gru.variables[1].assign(weights['recurrent_kernel'])
+  native_gru.variables[2].assign(tf.stack([weights['bias'], weights['recurrent_bias']], axis=0))
 
 
 def NativeLSTMWeights(native_lstm, haste_lstm):
   def swapple(x):
     i, g, f, o = tf.split(x, 4, axis=-1)
     return tf.concat([i, f, g, o], axis=-1)
-  native_lstm.variables[0].assign(swapple(haste_lstm.fw_layer.kernel))
-  native_lstm.variables[1].assign(swapple(haste_lstm.fw_layer.recurrent_kernel))
-  native_lstm.variables[2].assign(swapple(haste_lstm.fw_layer.bias))
+  weights = haste_lstm.fw_layer.get_weights()
+  native_lstm.variables[0].assign(swapple(weights['kernel']))
+  native_lstm.variables[1].assign(swapple(weights['recurrent_kernel']))
+  native_lstm.variables[2].assign(swapple(weights['bias']))
 
 
 RNN_MAP = {

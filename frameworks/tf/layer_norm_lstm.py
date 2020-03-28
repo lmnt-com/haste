@@ -98,7 +98,6 @@ class LayerNormLSTMLayer(tf.Module):
     self.zoneout = zoneout
     self.dtype = dtype or tf.float32
     self.kernel = None
-    self.recurrent_kernel = None
     self.bias = None
     self.gamma = None
     self.gamma_h = None
@@ -131,13 +130,24 @@ class LayerNormLSTMLayer(tf.Module):
     # Use the same format as LSTMBlockCell.
     with self.name_scope, v1.variable_scope(self.realname, 'lstm_cell'):
       weights = tf.concat([kernel_weights, recurrent_weights], axis=0)
-      self._kernel = v1.get_variable('kernel', initializer=weights)
-      self.kernel, self.recurrent_kernel = tf.split(self._kernel, [input_size, num_units], axis=0)
+      self.kernel = v1.get_variable('kernel', initializer=weights)
       self.bias = v1.get_variable('bias', initializer=biases)
       self.gamma = v1.get_variable('gamma', shape=[2, self.num_units * 4], initializer=v1.initializers.ones())
       self.gamma_h = v1.get_variable('gamma_h', shape=[self.num_units], initializer=v1.initializers.ones())
       self.beta_h = v1.get_variable('beta_h', shape=[self.num_units], initializer=v1.initializers.zeros())
     self.built = True
+
+  def get_weights(self):
+    kernel = self.kernel[:-self.num_units]
+    recurrent_kernel = self.kernel[-self.num_units:]
+    return {
+        'kernel': kernel,
+        'recurrent_kernel': recurrent_kernel,
+        'bias': self.bias,
+        'gamma': self.gamma,
+        'gamma_h': self.gamma_h,
+        'beta_h': self.beta_h,
+    }
 
   @property
   def state_size(self):
@@ -163,15 +173,15 @@ class LayerNormLSTMLayer(tf.Module):
       zoneout_mask += tf.random_uniform([time_steps, batch_size, self.num_units], dtype=self.dtype)
       zoneout_mask = tf.floor(zoneout_mask)
 
-    recurrent_kernel = tf.nn.dropout(self.recurrent_kernel, rate=self.dropout)
+    weights = self.get_weights()
     h, c, _ = LIB.haste_layer_norm_lstm(
         x,
-        self.kernel,
-        recurrent_kernel,
-        self.bias,
-        self.gamma,
-        self.gamma_h,
-        self.beta_h,
+        weights['kernel'],
+        tf.nn.dropout(weights['recurrent_kernel'], rate=self.dropout),
+        weights['bias'],
+        weights['gamma'],
+        weights['gamma_h'],
+        weights['beta_h'],
         zoneout_mask,
         training=training,
         zoneout_prob=self.zoneout)

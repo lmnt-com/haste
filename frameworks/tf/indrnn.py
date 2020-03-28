@@ -118,6 +118,13 @@ class IndRNNLayer(tf.Module):
 
     self.built = True
 
+  def get_weights(self):
+    return {
+        'kernel': self.kernel,
+        'recurrent_scale': self.recurrent_scale,
+        'bias': self.bias
+    }
+
   def __call__(self, inputs, sequence_length, training):
     self.build(inputs.shape)
 
@@ -134,11 +141,12 @@ class IndRNNLayer(tf.Module):
       zoneout_mask += tf.random_uniform([time_steps, batch_size, self.num_units], dtype=self.dtype)
       zoneout_mask = tf.floor(zoneout_mask)
 
+    weights = self.get_weights()
     result = LIB.haste_indrnn(
         inputs,
-        self.kernel,
-        self.recurrent_scale,
-        self.bias,
+        weights['kernel'],
+        weights['recurrent_scale'],
+        weights['bias'],
         zoneout_mask,
         training=training,
         zoneout_prob=self.zoneout)

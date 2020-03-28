@@ -29,10 +29,11 @@ def stfu():
 
 
 def copy_weights_gru(rnn_tf, rnn_pt):
-  kernel = torch.Tensor(rnn_tf.fw_layer.kernel.numpy())
-  recurrent_kernel = torch.Tensor(rnn_tf.fw_layer.recurrent_kernel.numpy())
-  bias = torch.Tensor(rnn_tf.fw_layer.bias.numpy())
-  recurrent_bias = torch.Tensor(rnn_tf.fw_layer.recurrent_bias.numpy())
+  weights = rnn_tf.fw_layer.get_weights()
+  kernel = torch.Tensor(weights['kernel'].numpy())
+  recurrent_kernel = torch.Tensor(weights['recurrent_kernel'].numpy())
+  bias = torch.Tensor(weights['bias'].numpy())
+  recurrent_bias = torch.Tensor(weights['recurrent_bias'].numpy())
 
   rnn_pt.kernel = nn.Parameter(kernel)
   rnn_pt.recurrent_kernel = nn.Parameter(recurrent_kernel)
@@ -41,9 +42,10 @@ def copy_weights_gru(rnn_tf, rnn_pt):
 
 
 def copy_weights_indrnn(rnn_tf, rnn_pt):
-  kernel = torch.Tensor(rnn_tf.fw_layer.kernel.numpy())
-  recurrent_scale = torch.Tensor(rnn_tf.fw_layer.recurrent_scale.numpy())
-  bias = torch.Tensor(rnn_tf.fw_layer.bias.numpy())
+  weights = rnn_tf.fw_layer.get_weights()
+  kernel = torch.Tensor(weights['kernel'].numpy())
+  recurrent_scale = torch.Tensor(weights['recurrent_scale'].numpy())
+  bias = torch.Tensor(weights['bias'].numpy())
 
   rnn_pt.kernel = nn.Parameter(kernel)
   rnn_pt.recurrent_scale = nn.Parameter(recurrent_scale)
@@ -51,12 +53,13 @@ def copy_weights_indrnn(rnn_tf, rnn_pt):
 
 
 def copy_weights_layer_norm_lstm(rnn_tf, rnn_pt):
-  kernel = torch.Tensor(rnn_tf.fw_layer.kernel.numpy())
-  recurrent_kernel = torch.Tensor(rnn_tf.fw_layer.recurrent_kernel.numpy())
-  bias = torch.Tensor(rnn_tf.fw_layer.bias.numpy())
-  gamma = torch.Tensor(rnn_tf.fw_layer.gamma.numpy())
-  gamma_h = torch.Tensor(rnn_tf.fw_layer.gamma_h.numpy())
-  beta_h = torch.Tensor(rnn_tf.fw_layer.beta_h.numpy())
+  weights = rnn_tf.fw_layer.get_weights()
+  kernel = torch.Tensor(weights['kernel'].numpy())
+  recurrent_kernel = torch.Tensor(weights['recurrent_kernel'].numpy())
+  bias = torch.Tensor(weights['bias'].numpy())
+  gamma = torch.Tensor(weights['gamma'].numpy())
+  gamma_h = torch.Tensor(weights['gamma_h'].numpy())
+  beta_h = torch.Tensor(weights['beta_h'].numpy())
 
   rnn_pt.kernel = nn.Parameter(kernel)
   rnn_pt.recurrent_kernel = nn.Parameter(recurrent_kernel)
@@ -67,9 +70,10 @@ def copy_weights_layer_norm_lstm(rnn_tf, rnn_pt):
 
 
 def copy_weights_lstm(rnn_tf, rnn_pt):
-  kernel = torch.Tensor(rnn_tf.fw_layer.kernel.numpy())
-  recurrent_kernel = torch.Tensor(rnn_tf.fw_layer.recurrent_kernel.numpy())
-  bias = torch.Tensor(rnn_tf.fw_layer.bias.numpy())
+  weights = rnn_tf.fw_layer.get_weights()
+  kernel = torch.Tensor(weights['kernel'].numpy())
+  recurrent_kernel = torch.Tensor(weights['recurrent_kernel'].numpy())
+  bias = torch.Tensor(weights['bias'].numpy())
 
   rnn_pt.kernel = nn.Parameter(kernel)
   rnn_pt.recurrent_kernel = nn.Parameter(recurrent_kernel)

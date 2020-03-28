@@ -109,8 +109,6 @@ class BaseRNN(tf.Module):
       `([output_fw, output_bw], [state_fw, state_bw])` for bidirectional
       layers.
     """
-    self.build(inputs.shape)
-
     if not time_major:
       inputs = transpose(inputs, [1, 0, 2])
 
