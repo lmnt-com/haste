@@ -21,6 +21,7 @@ import tensorflow as tf
 
 from tensorflow.compat import v1
 from .base_rnn import BaseRNN
+from .weight_config import WeightConfig
 
 
 __all__ = [
@@ -64,6 +65,7 @@ class GRULayer(tf.Module):
         kernel_initializer=None,
         recurrent_initializer=None,
         bias_initializer=None,
+        recurrent_bias_initializer=None,
         kernel_transform=None,
         recurrent_transform=None,
         bias_transform=None,
@@ -76,15 +78,16 @@ class GRULayer(tf.Module):
     self.realname = name
     self.num_units = num_units
 
-    self.kernel_initializer = kernel_initializer or v1.initializers.glorot_uniform()
-    self.recurrent_initializer = recurrent_initializer or v1.initializers.orthogonal()
-    self.bias_initializer = bias_initializer or v1.initializers.zeros()
-
     identity = lambda x: x
-    self.kernel_transform = kernel_transform or identity
-    self.recurrent_transform = recurrent_transform or identity
-    self.bias_transform = bias_transform or identity
-    self.recurrent_bias_transform = recurrent_bias_transform or identity
+    self.kernel_config = WeightConfig(v1.initializers.glorot_uniform(), None, identity)
+    self.recurrent_config = WeightConfig(v1.initializers.orthogonal(), None, identity)
+    self.bias_config = WeightConfig(v1.initializers.zeros(), None, identity)
+    self.recurrent_bias_config = WeightConfig(v1.initializers.zeros(), None, identity)
+
+    self.kernel_config.override(kernel_initializer, None, kernel_transform)
+    self.recurrent_config.override(recurrent_initializer, None, recurrent_transform)
+    self.bias_config.override(bias_initializer, None, bias_transform)
+    self.recurrent_bias_config.override(recurrent_bias_initializer, None, recurrent_bias_transform)
 
     self.dropout = dropout
     self.zoneout = zoneout
@@ -98,20 +101,15 @@ class GRULayer(tf.Module):
     num_units = self.num_units
     input_size = int(shape[-1])
 
-    kernel_shape = tf.TensorShape([input_size, num_units])
-    recurrent_shape = tf.TensorShape([num_units, num_units])
-    bias_shape = tf.TensorShape([num_units])
-    recurrent_bias_shape = tf.TensorShape([num_units])
+    def build_weights(initializer, shape):
+      weights = [initializer(shape, dtype=self.dtype) for _ in range(3)]
+      weights = tf.concat(weights, axis=-1)
+      return weights
 
-    kernel_weights = [self.kernel_initializer(kernel_shape, dtype=self.dtype) for _ in range(3)]
-    recurrent_weights = [self.recurrent_initializer(recurrent_shape, dtype=self.dtype) for _ in range(3)]
-    biases = [self.bias_initializer(bias_shape) for _ in range(3)]
-    recurrent_biases = [self.bias_initializer(recurrent_bias_shape) for _ in range(3)]
-
-    kernel_weights = tf.concat(kernel_weights, axis=-1)
-    recurrent_weights = tf.concat(recurrent_weights, axis=-1)
-    biases = tf.concat(biases, axis=-1)
-    recurrent_biases = tf.concat(recurrent_biases, axis=-1)
+    kernel_weights = build_weights(self.kernel_config.initializer, [input_size, num_units])
+    recurrent_weights = build_weights(self.recurrent_config.initializer, [num_units, num_units])
+    biases = build_weights(self.bias_config.initializer, [num_units])
+    recurrent_biases = build_weights(self.recurrent_bias_config.initializer, [num_units])
 
     weights = tf.concat([kernel_weights, recurrent_weights], axis=0)
     biases = tf.concat([biases, recurrent_biases], axis=0)
@@ -126,10 +124,10 @@ class GRULayer(tf.Module):
     kernel, recurrent_kernel = tf.split(self._kernel, [input_size, self.num_units], axis=0)
     bias, recurrent_bias = tf.split(self._bias, 2, axis=0)
     return {
-        'kernel': self.kernel_transform(kernel),
-        'recurrent_kernel': self.recurrent_transform(recurrent_kernel),
-        'bias': self.bias_transform(bias),
-        'recurrent_bias': self.recurrent_bias_transform(recurrent_bias)
+        'kernel': self.kernel_config.transform(kernel),
+        'recurrent_kernel': self.recurrent_config.transform(recurrent_kernel),
+        'bias': self.bias_config.transform(bias),
+        'recurrent_bias': self.recurrent_bias_config.transform(recurrent_bias)
     }
 
   def __call__(self, inputs, sequence_length, training):
@@ -199,9 +197,10 @@ class GRU(BaseRNN):
         matrix weights. Defaults to `glorot_uniform`.
       recurrent_initializer: (optional) the initializer to use for the
         recurrent matrix weights. Defaults to `orthogonal`.
-      bias_initializer: (optional) the initializer to use for both input and
-        recurrent bias vectors. Defaults to `zeros` unless `forget_bias` is
-        non-zero (see below).
+      bias_initializer: (optional) the initializer to use for input bias
+        vectors. Defaults to `zeros`.
+      recurrent_bias_initializer: (optional) the initializer to use for
+        recurrent bias vectors. Defaults to `zeros`.
       kernel_transform: (optional) a function with signature
         `(kernel: Tensor) -> Tensor` that transforms the kernel before it is
         used. Defaults to the identity function.

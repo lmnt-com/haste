@@ -22,6 +22,7 @@ import tensorflow as tf
 from tensorflow.compat import v1
 from tensorflow.compat.v1.nn import rnn_cell
 from .base_rnn import BaseRNN
+from .weight_config import WeightConfig
 
 
 __all__ = [
@@ -80,6 +81,9 @@ class LayerNormLSTMLayer(tf.Module):
         kernel_initializer=None,
         recurrent_initializer=None,
         bias_initializer=None,
+        kernel_transform=None,
+        recurrent_transform=None,
+        bias_transform=None,
         forget_bias=1.0,
         dropout=0.0,
         zoneout=0.0,
@@ -89,9 +93,10 @@ class LayerNormLSTMLayer(tf.Module):
     self.realname = name
     self.num_units = num_units
 
-    self.kernel_initializer = kernel_initializer or v1.initializers.glorot_uniform()
-    self.recurrent_initializer = recurrent_initializer or v1.initializers.orthogonal()
-    self.bias_initializer = bias_initializer or v1.initializers.zeros()
+    identity = lambda x: x
+    self.kernel_config = WeightConfig(v1.initializers.glorot_uniform(), None, identity)
+    self.recurrent_config = WeightConfig(v1.initializers.orthogonal(), None, identity)
+    self.bias_config = WeightConfig(v1.initializers.zeros(), None, identity)
 
     self.forget_bias = forget_bias
     self.dropout = dropout
@@ -115,13 +120,13 @@ class LayerNormLSTMLayer(tf.Module):
     recurrent_shape = tf.TensorShape([num_units, num_units])
     bias_shape = tf.TensorShape([num_units])
 
-    kernel_weights = [self.kernel_initializer(kernel_shape, dtype=self.dtype) for _ in range(4)]
-    recurrent_weights = [self.recurrent_initializer(recurrent_shape, dtype=self.dtype) for _ in range(4)]
+    kernel_weights = [self.kernel_config.initializer(kernel_shape, dtype=self.dtype) for _ in range(4)]
+    recurrent_weights = [self.recurrent_config.initializer(recurrent_shape, dtype=self.dtype) for _ in range(4)]
     if self.forget_bias:
       biases = [tf.zeros(bias_shape, dtype=self.dtype) for _ in range(4)]
       biases[2] = tf.constant(self.forget_bias, shape=bias_shape, dtype=self.dtype)
     else:
-      biases = [self.bias_initializer(bias_shape, dtype=self.dtype) for _ in range(4)]
+      biases = [self.bias_config.initializer(bias_shape, dtype=self.dtype) for _ in range(4)]
 
     kernel_weights = tf.concat(kernel_weights, axis=-1)
     recurrent_weights = tf.concat(recurrent_weights, axis=-1)
@@ -141,9 +146,9 @@ class LayerNormLSTMLayer(tf.Module):
     kernel = self.kernel[:-self.num_units]
     recurrent_kernel = self.kernel[-self.num_units:]
     return {
-        'kernel': kernel,
-        'recurrent_kernel': recurrent_kernel,
-        'bias': self.bias,
+        'kernel': self.kernel_config.transform(kernel),
+        'recurrent_kernel': self.recurrent_config.transform(recurrent_kernel),
+        'bias': self.bias_config.transform(self.bias),
         'gamma': self.gamma,
         'gamma_h': self.gamma_h,
         'beta_h': self.beta_h,
@@ -226,6 +231,15 @@ class LayerNormLSTM(BaseRNN):
       bias_initializer: (optional) the initializer to use for both input and
         recurrent bias vectors. Defaults to `zeros` unless `forget_bias` is
         non-zero (see below).
+      kernel_transform: (optional) a function with signature
+        `(kernel: Tensor) -> Tensor` that transforms the kernel before it is
+        used. Defaults to the identity function.
+      recurrent_transform: (optional) a function with signature
+        `(recurrent_kernel: Tensor) -> Tensor` that transforms the recurrent
+        kernel before it is used. Defaults to the identity function.
+      bias_transform: (optional) a function with signature
+        `(bias: Tensor) -> Tensor` that transforms the bias before it is used.
+        Defaults to the identity function.
       forget_bias: (optional) float, sets the initial weights for the forget
         gates. Defaults to 1 and overrides the `bias_initializer` unless this
         argument is set to 0.

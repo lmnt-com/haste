@@ -23,6 +23,7 @@ from tensorflow.compat import v1
 from tensorflow.compat.v1.nn import rnn_cell
 
 from .base_rnn import BaseRNN
+from .weight_config import WeightConfig
 
 
 __all__ = [
@@ -56,9 +57,9 @@ def indrnn_gradient(op, *grads):
   return [dx, dW, du, db, None]
 
 
-def _get_initializer(initializer, default):
+def _get_initializer(initializer):
   if not isinstance(initializer, dict):
-    return initializer or default
+    return initializer
   if 'uniform' in initializer:
     value = initializer['uniform']
     return v1.initializers.random_uniform(-value, value)
@@ -74,6 +75,9 @@ class IndRNNLayer(tf.Module):
         kernel_initializer=None,
         recurrent_initializer=None,
         bias_initializer=None,
+        kernel_transform=None,
+        recurrent_transform=None,
+        bias_transform=None,
         zoneout=0.0,
         dtype=None,
         name=None):
@@ -81,12 +85,14 @@ class IndRNNLayer(tf.Module):
     self.realname = name
     self.num_units = num_units
 
-    self.kernel_initializer = \
-        _get_initializer(kernel_initializer, v1.initializers.glorot_uniform())
-    self.recurrent_initializer = \
-        _get_initializer(recurrent_initializer, v1.initializers.random_uniform(-0.5, 0.5))
-    self.bias_initializer = \
-        _get_initializer(bias_initializer, v1.initializers.zeros())
+    identity = lambda x: x
+    self.kernel_config = WeightConfig(v1.initializers.glorot_uniform(), None, identity)
+    self.recurrent_config = WeightConfig(v1.initializers.random_uniform(-0.5, 0.5), None, identity)
+    self.bias_config = WeightConfig(v1.initializers.zeros(), None, identity)
+
+    self.kernel_config.override(_get_initializer(kernel_initializer), None, kernel_transform)
+    self.recurrent_config.override(_get_initializer(recurrent_initializer), None, recurrent_transform)
+    self.bias_config.override(_get_initializer(bias_initializer), None, bias_transform)
 
     self.zoneout = zoneout
     self.dtype = dtype or tf.float32
@@ -107,9 +113,9 @@ class IndRNNLayer(tf.Module):
     recurrent_shape = tf.TensorShape([num_units])
     bias_shape = tf.TensorShape([num_units])
 
-    kernel_weights = self.kernel_initializer(kernel_shape, dtype=self.dtype)
-    recurrent_weights = self.recurrent_initializer(recurrent_shape, dtype=self.dtype)
-    biases = self.bias_initializer(bias_shape)
+    kernel_weights = self.kernel_config.initializer(kernel_shape, dtype=self.dtype)
+    recurrent_weights = self.recurrent_config.initializer(recurrent_shape, dtype=self.dtype)
+    biases = self.bias_config.initializer(bias_shape)
 
     with self.name_scope, v1.variable_scope(self.realname, 'indrnn_cell'):
       self.kernel = v1.get_variable('kernel', initializer=kernel_weights)
@@ -120,9 +126,9 @@ class IndRNNLayer(tf.Module):
 
   def get_weights(self):
     return {
-        'kernel': self.kernel,
-        'recurrent_scale': self.recurrent_scale,
-        'bias': self.bias
+        'kernel': self.kernel_config.transform(self.kernel),
+        'recurrent_scale': self.recurrent_config.transform(self.recurrent_scale),
+        'bias': self.bias_config.transform(self.bias)
     }
 
   def __call__(self, inputs, sequence_length, training):
@@ -189,6 +195,15 @@ class IndRNN(BaseRNN):
         for details.
       bias_initializer: (optional) the initializer to use for the bias vector.
         Defaults to `zeros`.
+      kernel_transform: (optional) a function with signature
+        `(kernel: Tensor) -> Tensor` that transforms the kernel before it is
+        used. Defaults to the identity function.
+      recurrent_transform: (optional) a function with signature
+        `(recurrent_scale: Tensor) -> Tensor` that transforms the recurrent
+        scale vector before it is used. Defaults to the identity function.
+      bias_transform: (optional) a function with signature
+        `(bias: Tensor) -> Tensor` that transforms the bias before it is used.
+        Defaults to the identity function.
       zoneout: (optional) float, sets the zoneout rate for Zoneout
         regularization. Defaults to 0.
       dtype: (optional) the data type for this layer. Defaults to `tf.float32`.
