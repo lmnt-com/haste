@@ -96,6 +96,10 @@ norm_lstm_layer = haste.LayerNormLSTM(input_size=128, hidden_size=256, zoneout=0
 lstm_layer = haste.LSTM(input_size=128, hidden_size=256, zoneout=0.1, dropout=0.05)
 gru_layer = haste.GRU(input_size=128, hidden_size=256, zoneout=0.1, dropout=0.05)
 
+norm_lstm_layer.cuda()
+lstm_layer.cuda()
+gru_layer.cuda()
+
 # `x` is a CUDA tensor with shape [T,N,C]
 x = torch.rand([25, 5, 128]).cuda()
 
