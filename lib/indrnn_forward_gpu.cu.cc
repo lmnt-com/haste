@@ -25,6 +25,7 @@ namespace {
 template<typename T, bool Training, bool ApplyZoneout>
 __global__
 void IndrnnFwdOps(
+    const int steps,
     const int batch_size,
     const int hidden_size,
     const T* Wx,
@@ -41,18 +42,24 @@ void IndrnnFwdOps(
     return;
 
   const int idx = col * hidden_size + row;
-  const T a = Wx[idx] + u[row] * h[idx] + b[row];
-  T cur_h_value = tanh(a);
+  const int NH = batch_size * hidden_size;
+  const T u_row = u[row];
+  const T b_row = b[row];
 
-  if (ApplyZoneout) {
-    if (Training) {
-      cur_h_value = (cur_h_value - h[idx]) * zoneout_mask[idx] + h[idx];
-    } else {
-      cur_h_value = (zoneout_prob * h[idx]) + ((1.0f - zoneout_prob) * cur_h_value);
+  for (int i = 0; i < steps * NH; i += NH) {
+    const T a = Wx[idx + i] + u_row * h[idx + i] + b_row;
+    T cur_h_value = tanh(a);
+
+    if (ApplyZoneout) {
+      if (Training) {
+        cur_h_value = (cur_h_value - h[idx + i]) * zoneout_mask[idx + i] + h[idx + i];
+      } else {
+        cur_h_value = (zoneout_prob * h[idx + i]) + ((1.0f - zoneout_prob) * cur_h_value);
+      }
     }
-  }
 
-  h_out[idx] = cur_h_value;
+    h_out[idx + i] = cur_h_value;
+  }
 }
 
 }  // anonymous namespace
@@ -132,55 +139,57 @@ void ForwardPass<T>::Run(
       (hidden_size + blockDim.x - 1) / blockDim.x,
       (batch_size + blockDim.y - 1) / blockDim.y);
   const int NH = batch_size * hidden_size;
-  for (int i = 0; i < steps; ++i) {
-    if (training) {
-      if (zoneout_prob && zoneout_mask) {
-        IndrnnFwdOps<T, true, true><<<gridDim, blockDim, 0, stream>>>(
-            batch_size,
-            hidden_size,
-            workspace + i * NH,
-            u,
-            b,
-            h + i * NH,
-            h + (i + 1) * NH,
-            zoneout_prob,
-            zoneout_mask + i * NH);
-      } else {
-        IndrnnFwdOps<T, true, false><<<gridDim, blockDim, 0, stream>>>(
-            batch_size,
-            hidden_size,
-            workspace + i * NH,
-            u,
-            b,
-            h + i * NH,
-            h + (i + 1) * NH,
-            0.0f,
-            nullptr);
-      }
+  if (training) {
+    if (zoneout_prob && zoneout_mask) {
+      IndrnnFwdOps<T, true, true><<<gridDim, blockDim, 0, stream>>>(
+          steps,
+          batch_size,
+          hidden_size,
+          workspace,
+          u,
+          b,
+          h,
+          h + NH,
+          zoneout_prob,
+          zoneout_mask);
     } else {
-      if (zoneout_prob && zoneout_mask) {
-        IndrnnFwdOps<T, false, true><<<gridDim, blockDim, 0, stream>>>(
-            batch_size,
-            hidden_size,
-            workspace + i * NH,
-            u,
-            b,
-            h + i * NH,
-            h + (i + 1) * NH,
-            zoneout_prob,
-            zoneout_mask + i * NH);
-      } else {
-        IndrnnFwdOps<T, false, false><<<gridDim, blockDim, 0, stream>>>(
-            batch_size,
-            hidden_size,
-            workspace + i * NH,
-            u,
-            b,
-            h + i * NH,
-            h + (i + 1) * NH,
-            0.0f,
-            nullptr);
-      }
+      IndrnnFwdOps<T, true, false><<<gridDim, blockDim, 0, stream>>>(
+          steps,
+          batch_size,
+          hidden_size,
+          workspace,
+          u,
+          b,
+          h,
+          h + NH,
+          0.0f,
+          nullptr);
+    }
+  } else {
+    if (zoneout_prob && zoneout_mask) {
+      IndrnnFwdOps<T, false, true><<<gridDim, blockDim, 0, stream>>>(
+          steps,
+          batch_size,
+          hidden_size,
+          workspace,
+          u,
+          b,
+          h,
+          h + NH,
+          zoneout_prob,
+          zoneout_mask);
+    } else {
+      IndrnnFwdOps<T, false, false><<<gridDim, blockDim, 0, stream>>>(
+          steps,
+          batch_size,
+          hidden_size,
+          workspace,
+          u,
+          b,
+          h,
+          h + NH,
+          0.0f,
+          nullptr);
     }
   }
 

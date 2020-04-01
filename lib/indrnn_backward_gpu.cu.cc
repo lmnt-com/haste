@@ -25,6 +25,7 @@ namespace {
 template<typename T, bool ApplyZoneout>
 __global__
 void IndrnnBwdOps(
+    const int steps,
     const int batch_size,
     const int hidden_size,
     const T* u,
@@ -42,22 +43,34 @@ void IndrnnBwdOps(
   if (row >= hidden_size || col >= batch_size)
     return;
 
+  const int NH = batch_size * hidden_size;
   const int idx = col * hidden_size + row;
 
-  T dh_total = dh_new[idx] + dh_inout[idx];
-  T dh = static_cast<T>(0.0);
-  if (ApplyZoneout) {
-    const T mask = zoneout_mask[idx];
-    dh = (static_cast<T>(1.0) - mask) * dh_total;
-    dh_total = mask * dh_total;
+  const T u_row = u[row];
+  T dh_inout_idx = dh_inout[idx];
+  T du_sum = static_cast<T>(0.0);
+  T db_sum = static_cast<T>(0.0);
+
+  for (int i = (steps - 1) * NH; i >= 0; i -= NH) {
+    T dh_total = dh_new[idx + i] + dh_inout_idx;
+    T dh = static_cast<T>(0.0);
+    if (ApplyZoneout) {
+      const T mask = zoneout_mask[idx + i];
+      dh = (static_cast<T>(1.0) - mask) * dh_total;
+      dh_total = mask * dh_total;
+    }
+
+    const T dk = d_tanh(h[idx + i]) * dh_total;
+
+    dk_out[idx + i] = dk;
+    dh_inout_idx = dh + u_row * dk;
+    du_sum += h_prev[idx + i] * dk;
+    db_sum += dk;
   }
 
-  const T dk = d_tanh(h[idx]) * dh_total;
-
-  dk_out[idx] = dk;
-  dh_inout[idx] = dh + u[row] * dk;
-  atomicAdd(&du_out[row], h_prev[idx] * dk);
-  atomicAdd(&db_out[row], dk);
+  dh_inout[idx] = dh_inout_idx;
+  atomicAdd(&du_out[row], du_sum);
+  atomicAdd(&db_out[row], db_sum);
 }
 
 }  // anonymous namespace
@@ -125,34 +138,34 @@ void BackwardPass<T>::Run(
       (hidden_size + blockDim.x - 1) / blockDim.x,
       (batch_size + blockDim.y - 1) / blockDim.y);
   const int NH = batch_size * hidden_size;
-  for (int i = steps - 1; i >= 0; --i) {
-    if (zoneout_mask) {
-      IndrnnBwdOps<T, true><<<gridDim, blockDim, 0, stream>>>(
-          batch_size,
-          hidden_size,
-          u,
-          h + i * NH,
-          h + (i + 1) * NH,
-          dh_new + (i + 1) * NH,
-          du,
-          db,
-          dh,
-          workspace + i * NH,
-          zoneout_mask + i * NH);
-    } else {
-      IndrnnBwdOps<T, false><<<gridDim, blockDim, 0, stream>>>(
-          batch_size,
-          hidden_size,
-          u,
-          h + i * NH,
-          h + (i + 1) * NH,
-          dh_new + (i + 1) * NH,
-          du,
-          db,
-          dh,
-          workspace + i * NH,
-          nullptr);
-    }
+  if (zoneout_mask) {
+    IndrnnBwdOps<T, true><<<gridDim, blockDim, 0, stream>>>(
+        steps,
+        batch_size,
+        hidden_size,
+        u,
+        h,
+        h + NH,
+        dh_new + NH,
+        du,
+        db,
+        dh,
+        workspace,
+        zoneout_mask);
+  } else {
+    IndrnnBwdOps<T, false><<<gridDim, blockDim, 0, stream>>>(
+        steps,
+        batch_size,
+        hidden_size,
+        u,
+        h,
+        h + NH,
+        dh_new + NH,
+        du,
+        db,
+        dh,
+        workspace,
+        nullptr);
   }
 
   cudaStream_t save_stream;
