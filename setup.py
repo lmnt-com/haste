@@ -31,7 +31,6 @@ CLASSIFIERS = [
   'Intended Audience :: Education',
   'Intended Audience :: Science/Research',
   'License :: OSI Approved :: Apache Software License',
-  'Programming Language :: Python :: 2.7',
   'Programming Language :: Python :: 3.4',
   'Programming Language :: Python :: 3.5',
   'Programming Language :: Python :: 3.6',
@@ -67,15 +66,23 @@ if sys.argv[1] == 'haste_tf':
       classifiers = CLASSIFIERS)
 elif sys.argv[1] == 'haste_pytorch':
   del sys.argv[1]
+
+  import os
   from glob import glob
+  from platform import platform
   from torch.utils import cpp_extension
+
+  if 'Windows' in platform():
+    CUDA_HOME = os.environ.get('CUDA_HOME', os.environ.get('CUDA_PATH'))
+  else:
+    CUDA_HOME = os.environ.get('CUDA_HOME', '/usr/local/cuda')
+
   extension = cpp_extension.CppExtension(
       'haste_pytorch_lib',
       sources = glob('pytorch/*.cc'),
-      extra_compile_args = ['-Wno-sign-compare'],
-      include_dirs = ['lib', '/usr/local/cuda/include'],
-      libraries = ['haste'],
-      library_dirs = ['.'])
+      include_dirs = ['lib', os.path.join(CUDA_HOME, 'include')],
+      libraries = ['haste', 'cublas', 'cudart'],
+      library_dirs = ['.', os.path.join(CUDA_HOME, 'lib64'), os.path.join(CUDA_HOME, 'lib', 'x64')])
   setup(name = 'haste_pytorch',
       version = VERSION,
       description = DESCRIPTION,
