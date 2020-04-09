@@ -99,5 +99,5 @@ class ZoneoutWrapper(rnn_cell.RNNCell):
 
   def _build_mask(self, shape):
     mask = 1 - self.rate
-    mask += tf.random_uniform(shape)
+    mask += tf.random.uniform(shape)
     return tf.floor(mask)

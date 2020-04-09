@@ -144,7 +144,7 @@ class IndRNNLayer(tf.Module):
     zoneout_mask = tf.zeros([0, 0, 0], dtype=self.dtype)
     if self.zoneout:
       zoneout_mask = 1.0 - self.zoneout
-      zoneout_mask += tf.random_uniform([time_steps, batch_size, self.num_units], dtype=self.dtype)
+      zoneout_mask += tf.random.uniform([time_steps, batch_size, self.num_units], dtype=self.dtype)
       zoneout_mask = tf.floor(zoneout_mask)
 
     weights = self.get_weights()
