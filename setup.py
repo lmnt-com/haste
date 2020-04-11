@@ -74,12 +74,15 @@ elif sys.argv[1] == 'haste_pytorch':
 
   if 'Windows' in platform():
     CUDA_HOME = os.environ.get('CUDA_HOME', os.environ.get('CUDA_PATH'))
+    extra_args = []
   else:
     CUDA_HOME = os.environ.get('CUDA_HOME', '/usr/local/cuda')
+    extra_args = ['-Wno-sign-compare']
 
   extension = cpp_extension.CppExtension(
       'haste_pytorch_lib',
       sources = glob('pytorch/*.cc'),
+      extra_compile_args = extra_args,
       include_dirs = ['lib', os.path.join(CUDA_HOME, 'include')],
       libraries = ['haste', 'cublas', 'cudart'],
       library_dirs = ['.', os.path.join(CUDA_HOME, 'lib64'), os.path.join(CUDA_HOME, 'lib', 'x64')])
