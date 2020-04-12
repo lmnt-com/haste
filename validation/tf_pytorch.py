@@ -52,6 +52,21 @@ def copy_weights_indrnn(rnn_tf, rnn_pt):
   rnn_pt.bias = nn.Parameter(bias)
 
 
+def copy_weights_layer_norm_gru(rnn_tf, rnn_pt):
+  weights = rnn_tf.fw_layer.get_weights()
+  kernel = torch.Tensor(weights['kernel'].numpy())
+  recurrent_kernel = torch.Tensor(weights['recurrent_kernel'].numpy())
+  bias = torch.Tensor(weights['bias'].numpy())
+  recurrent_bias = torch.Tensor(weights['recurrent_bias'].numpy())
+  gamma = torch.Tensor(weights['gamma'].numpy())
+
+  rnn_pt.kernel = nn.Parameter(kernel)
+  rnn_pt.recurrent_kernel = nn.Parameter(recurrent_kernel)
+  rnn_pt.bias = nn.Parameter(bias)
+  rnn_pt.recurrent_bias = nn.Parameter(recurrent_bias)
+  rnn_pt.gamma = nn.Parameter(gamma)
+
+
 def copy_weights_layer_norm_lstm(rnn_tf, rnn_pt):
   weights = rnn_tf.fw_layer.get_weights()
   kernel = torch.Tensor(weights['kernel'].numpy())
@@ -88,6 +103,7 @@ hidden_size = 256
 RNN_MAP = {
     'gru': haste_tf.GRU,
     'indrnn': haste_tf.IndRNN,
+    'layer_norm_gru': haste_tf.LayerNormGRU,
     'layer_norm_lstm': haste_tf.LayerNormLSTM,
     'lstm': haste_tf.LSTM,
 }
@@ -95,6 +111,7 @@ RNN_MAP = {
 TF_TO_PT = {
     haste_tf.GRU: haste_pytorch.GRU,
     haste_tf.IndRNN: haste_pytorch.IndRNN,
+    haste_tf.LayerNormGRU: haste_pytorch.LayerNormGRU,
     haste_tf.LayerNormLSTM: haste_pytorch.LayerNormLSTM,
     haste_tf.LSTM: haste_pytorch.LSTM,
 }
@@ -102,6 +119,7 @@ TF_TO_PT = {
 WEIGHT_COPY_MAP = {
     haste_tf.GRU: copy_weights_gru,
     haste_tf.IndRNN: copy_weights_indrnn,
+    haste_tf.LayerNormGRU: copy_weights_layer_norm_gru,
     haste_tf.LayerNormLSTM: copy_weights_layer_norm_lstm,
     haste_tf.LSTM: copy_weights_lstm,
 }

@@ -21,6 +21,7 @@ import haste_pytorch as haste
 RNN_MAP = {
     'gru': haste.GRU,
     'indrnn': haste.IndRNN,
+    'layer_norm_gru': haste.LayerNormGRU,
     'layer_norm_lstm': haste.LayerNormLSTM,
     'lstm': haste.LSTM,
 }
