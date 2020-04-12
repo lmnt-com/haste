@@ -152,7 +152,7 @@ apply(fn)
 
 Applies ``fn`` recursively to every submodule (as returned by ``.children()``)
 as well as self. Typical use includes initializing the parameters of a model
-(see also :ref:`torch-nn-init`).
+(see also :ref:`nn-init-doc`).
 
 #### Args:
 
@@ -341,6 +341,7 @@ Casts all floating point parameters and buffers to float datatype.
 ``` python
 forward(
     input,
+    state=None,
     lengths=None
 )
 ```

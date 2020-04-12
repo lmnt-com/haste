@@ -1,5 +1,5 @@
 <div itemscope itemtype="http://developers.google.com/ReferenceObject">
-<meta itemprop="name" content="haste_pytorch.LSTM" />
+<meta itemprop="name" content="haste_pytorch.LayerNormGRU" />
 <meta itemprop="path" content="Stable" />
 <meta itemprop="property" content="__call__"/>
 <meta itemprop="property" content="__init__"/>
@@ -14,7 +14,6 @@
 <meta itemprop="property" content="extra_repr"/>
 <meta itemprop="property" content="float"/>
 <meta itemprop="property" content="forward"/>
-<meta itemprop="property" content="from_native_weights"/>
 <meta itemprop="property" content="half"/>
 <meta itemprop="property" content="load_state_dict"/>
 <meta itemprop="property" content="modules"/>
@@ -33,34 +32,35 @@
 <meta itemprop="property" content="share_memory"/>
 <meta itemprop="property" content="state_dict"/>
 <meta itemprop="property" content="to"/>
-<meta itemprop="property" content="to_native_weights"/>
 <meta itemprop="property" content="train"/>
 <meta itemprop="property" content="type"/>
 <meta itemprop="property" content="zero_grad"/>
 </div>
 
-# haste_pytorch.LSTM
+# haste_pytorch.LayerNormGRU
 
 <!-- Insert buttons and diff -->
 
 
-## Class `LSTM`
+## Class `LayerNormGRU`
 
-Long Short-Term Memory layer.
+Layer Normalized Gated Recurrent Unit layer.
 
 
 
 <!-- Placeholder for "Used in" -->
 
-This LSTM layer offers a fused, GPU-accelerated PyTorch op for inference
-and training. Although this implementation is comparable in performance to
-cuDNN's LSTM, it offers additional options not typically found in other
-high-performance implementations. DropConnect and Zoneout regularization are
-built-in, and this layer allows setting a non-zero initial forget gate bias.
+This GRU layer applies layer normalization to the input and recurrent output
+activations of a standard GRU. The implementation is fused and
+GPU-accelerated. There are two commonly-used variants of GRU cells. This one
+implements 1406.1078v1 which applies the reset gate to the hidden state
+after matrix multiplication. The other variant, 1406.1078v3, applies the
+reset gate before matrix multiplication and is currently unsupported.
 
-See [\_\_init\_\_](#__init__) and [forward](#forward) for general usage.
-See [from_native_weights](#from_native_weights) and
-[to_native_weights](#to_native_weights) for compatibility with PyTorch LSTMs.
+This layer has built-in support for DropConnect and Zoneout, which are
+both techniques used to regularize RNNs.
+
+See [\_\_init\_\_](#__init__) and [forward](#forward) for usage.
 
 <h2 id="__init__"><code><a name="__init__">__init__</a></code></h2>
 
@@ -69,13 +69,12 @@ __init__(
     input_size,
     hidden_size,
     batch_first=False,
-    forget_bias=1.0,
     dropout=0.0,
     zoneout=0.0
 )
 ```
 
-Initialize the parameters of the LSTM layer.
+Initialize the parameters of the GRU layer.
 
 
 #### Arguments:
@@ -85,8 +84,6 @@ Initialize the parameters of the LSTM layer.
 * <b>`hidden_size`</b>: int, the feature dimension of the output.
 * <b>`batch_first`</b>: (optional) bool, if `True`, then the input and output
   tensors are provided as `(batch, seq, feature)`.
-* <b>`forget_bias`</b>: (optional) float, sets the initial bias of the forget gate
-  for this LSTM cell.
 * <b>`dropout`</b>: (optional) float, sets the dropout rate for DropConnect
   regularization on the recurrent matrix.
 * <b>`zoneout`</b>: (optional) float, sets the zoneout rate for Zoneout
@@ -97,14 +94,18 @@ Initialize the parameters of the LSTM layer.
 
 
 * <b>`kernel`</b>: the input projection weight matrix. Dimensions
-  (input_size, hidden_size * 4) with `i,g,f,o` gate layout. Initialized
+  (input_size, hidden_size * 3) with `z,r,h` gate layout. Initialized
   with Xavier uniform initialization.
 * <b>`recurrent_kernel`</b>: the recurrent projection weight matrix. Dimensions
-  (hidden_size, hidden_size * 4) with `i,g,f,o` gate layout. Initialized
+  (hidden_size, hidden_size * 3) with `z,r,h` gate layout. Initialized
   with orthogonal initialization.
-* <b>`bias`</b>: the projection bias vector. Dimensions (hidden_size * 4) with
-  `i,g,f,o` gate layout. The forget gate biases are initialized to
-  `forget_bias` and the rest are zeros.
+* <b>`bias`</b>: the input projection bias vector. Dimensions (hidden_size * 3) with
+  `z,r,h` gate layout. Initialized to zeros.
+* <b>`recurrent_bias`</b>: the recurrent projection bias vector. Dimensions
+  (hidden_size * 3) with `z,r,h` gate layout. Initialized to zeros.
+* <b>`gamma`</b>: the input and recurrent normalization gain. Dimensions
+  (2, hidden_size * 4) with `gamma[0]` specifying the input gain and
+  `gamma[1]` specifying the recurrent gain. Initialized to ones.
 
 
 
@@ -344,15 +345,17 @@ forward(
 )
 ```
 
-Runs a forward pass of the LSTM layer.
+Runs a forward pass of the GRU layer.
 
 
 #### Arguments:
 
 
-* <b>`input`</b>: Tensor, a batch of input sequences to pass through the LSTM.
+* <b>`input`</b>: Tensor, a batch of input sequences to pass through the GRU.
   Dimensions (seq_len, batch_size, input_size) if `batch_first` is
   `False`, otherwise (batch_size, seq_len, input_size).
+* <b>`state`</b>: (optional) Tensor, the intial state for each batch element in
+  `input`. Dimensions (1, batch_size, hidden_size). Defaults to zeros.
 * <b>`lengths`</b>: (optional) Tensor, list of sequence lengths for each batch
   element. Dimension (batch_size). This argument may be omitted if
   all batch elements are unpadded and have the same sequence length.
@@ -361,36 +364,14 @@ Runs a forward pass of the LSTM layer.
 #### Returns:
 
 
-* <b>`output`</b>: Tensor, the output of the LSTM layer. Dimensions
+* <b>`output`</b>: Tensor, the output of the GRU layer. Dimensions
   (seq_len, batch_size, hidden_size) if `batch_first` is `False` (default)
   or (batch_size, seq_len, hidden_size) if `batch_first` is `True`. Note
   that if `lengths` was specified, the `output` tensor will not be
   masked. It's the caller's responsibility to either not use the invalid
   entries or to mask them out before using them.
-* <b>`(h_n, c_n)`</b>: the hidden and cell states, respectively, for the last
-  sequence item. Dimensions (1, batch_size, hidden_size).
-
-<h3 id="from_native_weights"><code><a name="from_native_weights">from_native_weights</a></code></h3>
-
-``` python
-from_native_weights(
-    weight_ih_l0,
-    weight_hh_l0,
-    bias_ih_l0,
-    bias_hh_l0
-)
-```
-
-Copies and converts the provided PyTorch LSTM weights into this layer.
-
-
-#### Arguments:
-
-
-* <b>`weight_ih_l0`</b>: Parameter, the input-hidden weights of the PyTorch LSTM layer.
-* <b>`weight_hh_l0`</b>: Parameter, the hidden-hidden weights of the PyTorch LSTM layer.
-* <b>`bias_ih_l0`</b>: Parameter, the input-hidden bias of the PyTorch LSTM layer.
-* <b>`bias_hh_l0`</b>: Parameter, the hidden-hidden bias of the PyTorch LSTM layer.
+* <b>`h_n`</b>: the hidden state for the last sequence item. Dimensions
+  (1, batch_size, hidden_size).
 
 <h3 id="half"><code><a name="half">half</a></code></h3>
 
@@ -917,23 +898,6 @@ Example::
     tensor([[ 0.1914, -0.3420],
             [-0.5112, -0.2324]], dtype=torch.float16)
     ```
-
-<h3 id="to_native_weights"><code><a name="to_native_weights">to_native_weights</a></code></h3>
-
-``` python
-to_native_weights()
-```
-
-Converts Haste LSTM weights to native PyTorch LSTM weights.
-
-
-#### Returns:
-
-
-* <b>`weight_ih_l0`</b>: Parameter, the input-hidden weights of the LSTM layer.
-* <b>`weight_hh_l0`</b>: Parameter, the hidden-hidden weights of the LSTM layer.
-* <b>`bias_ih_l0`</b>: Parameter, the input-hidden bias of the LSTM layer.
-* <b>`bias_hh_l0`</b>: Parameter, the hidden-hidden bias of the LSTM layer.
 
 <h3 id="train"><code><a name="train">train</a></code></h3>
 

@@ -178,11 +178,13 @@ class LayerNormGRU(BaseRNN):
 
   This GRU layer applies layer normalization to the input and recurrent output
   activations of a standard GRU. The implementation is fused and
-  GPU-accelerated. DropConnect and Zoneout regularization are built-in. There
-  are two commonly-used variants of GRU cells. This one implements 1406.1078v1
-  which applies the reset gate to the hidden state after matrix multiplication.
-  The other variant, 1406.1078v3, applies the reset gate before matrix
-  multiplication and is currently unsupported.
+  GPU-accelerated. There are two commonly-used variants of GRU cells. This one
+  implements 1406.1078v1 which applies the reset gate to the hidden state
+  after matrix multiplication. The other variant, 1406.1078v3, applies the
+  reset gate before matrix multiplication and is currently unsupported.
+
+  This layer has built-in support for DropConnect and Zoneout, which are
+  both techniques used to regularize RNNs.
   """
 
   def __init__(self, num_units, direction='unidirectional', **kwargs):

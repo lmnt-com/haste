@@ -13,6 +13,9 @@
 # limitations under the License.
 # ==============================================================================
 
+"""Independently Recurrent Neural Network"""
+
+
 import haste_pytorch_lib as LIB
 import torch
 import torch.nn as nn
@@ -71,12 +74,43 @@ class IndRNNFunction(torch.autograd.Function):
 
 
 class IndRNN(BaseRNN):
+  """
+  Independently Recurrent Neural Network layer.
+
+  This layer offers a fused, GPU-accelerated PyTorch op for inference and
+  training. It also supports Zoneout regularization.
+
+  See [\_\_init\_\_](#__init__) and [forward](#forward) for usage.
+  """
+
   def __init__(
       self,
       input_size,
       hidden_size,
       batch_first=False,
       zoneout=0.0):
+    """
+    Initialize the parameters of the IndRNN layer.
+
+    Arguments:
+      input_size: int, the feature dimension of the input.
+      hidden_size: int, the feature dimension of the output.
+      batch_first: (optional) bool, if `True`, then the input and output
+        tensors are provided as `(batch, seq, feature)`.
+      zoneout: (optional) float, sets the zoneout rate for Zoneout
+        regularization.
+
+    Variables:
+      kernel: the input projection weight matrix. Dimensions
+        (input_size, hidden_size). Initialized with Xavier uniform
+        initialization.
+      recurrent_scale: the recurrent scale weight vector. Dimensions
+        (hidden_size). Initialized uniformly in [-0.5, 0.5]. Note that this
+        initialization scheme is different than in the original authors'
+        implementation. See https://github.com/lmnt-com/haste/issues/7 for
+        details.
+      bias: the RNN bias vector. Dimensions (hidden_size). Initialized to zeros.
+    """
     super().__init__(input_size, hidden_size, batch_first, zoneout)
 
     if zoneout < 0 or zoneout > 1:
@@ -98,6 +132,29 @@ class IndRNN(BaseRNN):
     nn.init.zeros_(self.bias)
 
   def forward(self, input, state=None, lengths=None):
+    """
+    Runs a forward pass of the IndRNN layer.
+
+    Arguments:
+      input: Tensor, a batch of input sequences to pass through the GRU.
+        Dimensions (seq_len, batch_size, input_size) if `batch_first` is
+        `False`, otherwise (batch_size, seq_len, input_size).
+      state: (optional) Tensor, the initial state for each batch element in
+        `input`. Dimensions (1, batch_size, hidden_size). Defaults to zeros.
+      lengths: (optional) Tensor, list of sequence lengths for each batch
+        element. Dimension (batch_size). This argument may be omitted if
+        all batch elements are unpadded and have the same sequence length.
+
+    Returns:
+      output: Tensor, the output of the GRU layer. Dimensions
+        (seq_len, batch_size, hidden_size) if `batch_first` is `False` (default)
+        or (batch_size, seq_len, hidden_size) if `batch_first` is `True`. Note
+        that if `lengths` was specified, the `output` tensor will not be
+        masked. It's the caller's responsibility to either not use the invalid
+        entries or to mask them out before using them.
+      state: the hidden state for the last sequence item. Dimensions
+        (1, batch_size, hidden_size).
+    """
     input = self._permute(input)
     state_shape = [1, input.shape[1], self.hidden_size]
     h0 = self._get_state(input, state, state_shape)

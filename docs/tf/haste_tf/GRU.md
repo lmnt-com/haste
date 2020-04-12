@@ -1,6 +1,7 @@
 <div itemscope itemtype="http://developers.google.com/ReferenceObject">
 <meta itemprop="name" content="haste_tf.GRU" />
 <meta itemprop="path" content="Stable" />
+<meta itemprop="property" content="bidirectional"/>
 <meta itemprop="property" content="name"/>
 <meta itemprop="property" content="name_scope"/>
 <meta itemprop="property" content="output_size"/>
@@ -65,9 +66,22 @@ Initialize the parameters of the GRU layer.
   matrix weights. Defaults to `glorot_uniform`.
 * <b>`recurrent_initializer`</b>: (optional) the initializer to use for the
   recurrent matrix weights. Defaults to `orthogonal`.
-* <b>`bias_initializer`</b>: (optional) the initializer to use for both input and
-  recurrent bias vectors. Defaults to `zeros` unless `forget_bias` is
-  non-zero (see below).
+* <b>`bias_initializer`</b>: (optional) the initializer to use for input bias
+  vectors. Defaults to `zeros`.
+* <b>`recurrent_bias_initializer`</b>: (optional) the initializer to use for
+  recurrent bias vectors. Defaults to `zeros`.
+* <b>`kernel_transform`</b>: (optional) a function with signature
+  `(kernel: Tensor) -> Tensor` that transforms the kernel before it is
+  used. Defaults to the identity function.
+* <b>`recurrent_transform`</b>: (optional) a function with signature
+  `(recurrent_kernel: Tensor) -> Tensor` that transforms the recurrent
+  kernel before it is used. Defaults to the identity function.
+* <b>`bias_transform`</b>: (optional) a function with signature
+  `(bias: Tensor) -> Tensor` that transforms the bias before it is used.
+  Defaults to the identity function.
+* <b>`recurrent_bias_transform`</b>: (optional) a function with signature
+  `(recurrent_bias: Tensor) -> Tensor` that transforms the recurrent bias
+  before it is used. Defaults to the identity function.
 * <b>`dropout`</b>: (optional) float, sets the dropout rate for DropConnect
   regularization on the recurrent matrix. Defaults to 0.
 * <b>`zoneout`</b>: (optional) float, sets the zoneout rate for Zoneout
@@ -78,6 +92,11 @@ Initialize the parameters of the GRU layer.
 
 
 ## Properties
+
+<h3 id="bidirectional"><code>bidirectional</code></h3>
+
+`True` if this is a bidirectional RNN, `False` otherwise.
+
 
 <h3 id="name"><code>name</code></h3>
 
@@ -169,7 +188,7 @@ __call__(
 )
 ```
 
-Runs the GRU layer.
+Runs the RNN layer.
 
 
 #### Arguments:
@@ -189,7 +208,7 @@ Runs the GRU layer.
 #### Returns:
 
 A pair, `(output, state)` for unidirectional layers, or a pair
-`([output_fwd, output_bwd], [state_fwd, state_bwd])` for bidirectional
+`([output_fw, output_bw], [state_fw, state_bw])` for bidirectional
 layers.
 
 
@@ -201,7 +220,7 @@ build(shape)
 
 Creates the variables of the layer.
 
-Calling this method is optional for users of the GRU class. It is called
+Calling this method is optional for users of the RNN class. It is called
 internally with the correct shape when `__call__` is invoked.
 
 #### Arguments:

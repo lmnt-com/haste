@@ -93,12 +93,12 @@ class LayerNormGRU(BaseRNN):
   """
   Layer Normalized Gated Recurrent Unit layer.
 
-  This GRU layer offers a fused, GPU-accelerated PyTorch op for inference
-  and training. There are two commonly-used variants of GRU cells. This one
+  This GRU layer applies layer normalization to the input and recurrent output
+  activations of a standard GRU. The implementation is fused and
+  GPU-accelerated. There are two commonly-used variants of GRU cells. This one
   implements 1406.1078v1 which applies the reset gate to the hidden state
-  after matrix multiplication. cuDNN also implements this variant. The other
-  variant, 1406.1078v3, applies the reset gate before matrix multiplication
-  and is currently unsupported.
+  after matrix multiplication. The other variant, 1406.1078v3, applies the
+  reset gate before matrix multiplication and is currently unsupported.
 
   This layer has built-in support for DropConnect and Zoneout, which are
   both techniques used to regularize RNNs.
@@ -136,13 +136,16 @@ class LayerNormGRU(BaseRNN):
         `z,r,h` gate layout. Initialized to zeros.
       recurrent_bias: the recurrent projection bias vector. Dimensions
         (hidden_size * 3) with `z,r,h` gate layout. Initialized to zeros.
+      gamma: the input and recurrent normalization gain. Dimensions
+        (2, hidden_size * 4) with `gamma[0]` specifying the input gain and
+        `gamma[1]` specifying the recurrent gain. Initialized to ones.
     """
     super().__init__(input_size, hidden_size, batch_first, zoneout)
 
     if dropout < 0 or dropout > 1:
-      raise ValueError('GRU: dropout must be in [0.0, 1.0]')
+      raise ValueError('LayerNormGRU: dropout must be in [0.0, 1.0]')
     if zoneout < 0 or zoneout > 1:
-      raise ValueError('GRU: zoneout must be in [0.0, 1.0]')
+      raise ValueError('LayerNormGRU: zoneout must be in [0.0, 1.0]')
 
     self.dropout = dropout
 
@@ -171,6 +174,8 @@ class LayerNormGRU(BaseRNN):
       input: Tensor, a batch of input sequences to pass through the GRU.
         Dimensions (seq_len, batch_size, input_size) if `batch_first` is
         `False`, otherwise (batch_size, seq_len, input_size).
+      state: (optional) Tensor, the intial state for each batch element in
+        `input`. Dimensions (1, batch_size, hidden_size). Defaults to zeros.
       lengths: (optional) Tensor, list of sequence lengths for each batch
         element. Dimension (batch_size). This argument may be omitted if
         all batch elements are unpadded and have the same sequence length.

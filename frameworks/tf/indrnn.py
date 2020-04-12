@@ -172,8 +172,8 @@ class IndRNN(BaseRNN):
   """
   Independently Recurrent Neural Network layer.
 
-  This layer offers a fused, GPU-accelerated TensorFlow op for inference
-  and training. It also supports Zoneout regularization.
+  This layer offers a fused, GPU-accelerated TensorFlow op for inference and
+  training. It also supports Zoneout regularization.
   """
 
   def __init__(self, num_units, direction='unidirectional', **kwargs):

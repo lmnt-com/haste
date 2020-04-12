@@ -1,5 +1,5 @@
 <div itemscope itemtype="http://developers.google.com/ReferenceObject">
-<meta itemprop="name" content="haste_tf.LSTM" />
+<meta itemprop="name" content="haste_tf.LayerNormGRU" />
 <meta itemprop="path" content="Stable" />
 <meta itemprop="property" content="bidirectional"/>
 <meta itemprop="property" content="name"/>
@@ -15,28 +15,28 @@
 <meta itemprop="property" content="with_name_scope"/>
 </div>
 
-# haste_tf.LSTM
+# haste_tf.LayerNormGRU
 
 <!-- Insert buttons and diff -->
 
 
-## Class `LSTM`
+## Class `LayerNormGRU`
 
-Long Short-Term Memory layer.
+Layer Normalized Gated Recurrent Unit layer.
 
 
 
 <!-- Placeholder for "Used in" -->
 
-This LSTM layer offers a fused, GPU-accelerated TensorFlow op for inference
-and training. Its weights and variables are compatible with `BasicLSTMCell`,
-`LSTMCell`, and `LSTMBlockCell` by default, and is able to load weights
-from `tf.contrib.cudnn_rnn.CudnnLSTM` when `cudnn_compat=True` is specified.
+This GRU layer applies layer normalization to the input and recurrent output
+activations of a standard GRU. The implementation is fused and
+GPU-accelerated. There are two commonly-used variants of GRU cells. This one
+implements 1406.1078v1 which applies the reset gate to the hidden state
+after matrix multiplication. The other variant, 1406.1078v3, applies the
+reset gate before matrix multiplication and is currently unsupported.
 
-Although this implementation is comparable in performance to cuDNN's LSTM,
-it offers additional options not typically found in other high-performance
-implementations. DropConnect and Zoneout regularization are built-in, and
-this layer allows setting a non-zero initial forget gate bias.
+This layer has built-in support for DropConnect and Zoneout, which are
+both techniques used to regularize RNNs.
 
 <h2 id="__init__"><code><a name="__init__">__init__</a></code></h2>
 
@@ -48,7 +48,7 @@ __init__(
 )
 ```
 
-Initialize the parameters of the LSTM layer.
+Initialize the parameters of the GRU layer.
 
 
 #### Arguments:
@@ -66,9 +66,10 @@ Initialize the parameters of the LSTM layer.
   matrix weights. Defaults to `glorot_uniform`.
 * <b>`recurrent_initializer`</b>: (optional) the initializer to use for the
   recurrent matrix weights. Defaults to `orthogonal`.
-* <b>`bias_initializer`</b>: (optional) the initializer to use for both input and
-  recurrent bias vectors. Defaults to `zeros` unless `forget_bias` is
-  non-zero (see below).
+* <b>`bias_initializer`</b>: (optional) the initializer to use for input bias
+  vectors. Defaults to `zeros`.
+* <b>`recurrent_bias_initializer`</b>: (optional) the initializer to use for
+  recurrent bias vectors. Defaults to `zeros`.
 * <b>`kernel_transform`</b>: (optional) a function with signature
   `(kernel: Tensor) -> Tensor` that transforms the kernel before it is
   used. Defaults to the identity function.
@@ -78,20 +79,15 @@ Initialize the parameters of the LSTM layer.
 * <b>`bias_transform`</b>: (optional) a function with signature
   `(bias: Tensor) -> Tensor` that transforms the bias before it is used.
   Defaults to the identity function.
-* <b>`forget_bias`</b>: (optional) float, sets the initial weights for the forget
-  gates. Defaults to 1 and overrides the `bias_initializer` unless this
-  argument is set to 0.
+* <b>`recurrent_bias_transform`</b>: (optional) a function with signature
+  `(recurrent_bias: Tensor) -> Tensor` that transforms the recurrent bias
+  before it is used. Defaults to the identity function.
 * <b>`dropout`</b>: (optional) float, sets the dropout rate for DropConnect
   regularization on the recurrent matrix. Defaults to 0.
 * <b>`zoneout`</b>: (optional) float, sets the zoneout rate for Zoneout
   regularization. Defaults to 0.
 * <b>`dtype`</b>: (optional) the data type for this layer. Defaults to `tf.float32`.
 * <b>`name`</b>: (optional) string, the name for this layer.
-* <b>`cudnn_compat`</b>: (optional) bool, if `True`, the variables created by this
-  layer are compatible with `tf.contrib.cudnn_rnn.CudnnLSTM`. Note that
-  this should only be set if you're restoring variables from a cuDNN
-  model. It's currently not possible to train a model with
-  `cudnn_compat=True` and restore it with CudnnLSTM. Defaults to `False`.
 
 
 
