@@ -4,7 +4,14 @@
 
 --------------------------------------------------------------------------------
 
-Haste is a CUDA implementation of fused [LSTM](https://en.wikipedia.org/wiki/Long_short-term_memory), [Layer Normalized LSTM](https://arxiv.org/abs/1607.06450), and [GRU](https://en.wikipedia.org/wiki/Gated_recurrent_unit) layers with built-in [DropConnect](http://proceedings.mlr.press/v28/wan13.html) and [Zoneout](https://arxiv.org/abs/1606.01305) regularization. These layers are exposed through C++ and Python APIs for easy integration into your own projects or machine learning frameworks.
+Haste is a CUDA implementation of fused RNN layers with built-in [DropConnect](http://proceedings.mlr.press/v28/wan13.html) and [Zoneout](https://arxiv.org/abs/1606.01305) regularization. These layers are exposed through C++ and Python APIs for easy integration into your own projects or machine learning frameworks.
+
+Which RNN types are supported?
+- [GRU](https://en.wikipedia.org/wiki/Gated_recurrent_unit)
+- [IndRNN](http://arxiv.org/abs/1803.04831)
+- [LSTM](https://en.wikipedia.org/wiki/Long_short-term_memory)
+- [Layer Normalized GRU](https://arxiv.org/abs/1607.06450)
+- [Layer Normalized LSTM](https://arxiv.org/abs/1607.06450)
 
 What's included in this project?
 - a standalone C++ API (`libhaste`)
@@ -16,14 +23,14 @@ What's included in this project?
 For questions or feedback about Haste, please open an issue on GitHub or send us an email at [haste@lmnt.com](mailto:haste@lmnt.com).
 
 ## Performance
-Our LSTM benchmark indicates that Haste has the fastest publicly available implementation for nearly all problem sizes.
+Our LSTM and GRU benchmarks indicate that Haste has the fastest publicly available implementation for nearly all problem sizes. The following charts show our LSTM results, but the GRU results are qualitatively similar.
 <table>
   <tr><td><img src="https://lmnt.com/assets/haste/benchmark/report_n=16_c=128.png"></td><td><img src="https://lmnt.com/assets/haste/benchmark/report_n=32_c=256.png"></td></tr>
   <tr></tr>
   <tr><td><img src="https://lmnt.com/assets/haste/benchmark/report_n=64_c=128.png"></td><td><img src="https://lmnt.com/assets/haste/benchmark/report_n=128_c=256.png"></td></tr>
 </table>
 
-Here is our complete benchmark result grid:
+Here is our complete LSTM benchmark result grid:
 <br>
 [`N=1 C=64`](https://lmnt.com/assets/haste/benchmark/report_n=1_c=64.png)
 [`N=1 C=128`](https://lmnt.com/assets/haste/benchmark/report_n=1_c=128.png)
@@ -69,20 +76,28 @@ pip install haste_tf-*.whl
 pip install haste_pytorch-*.whl
 ```
 
+## Google Colab
+All of the Haste APIs and executables work in Google Colab. For a quick start, take a look at the [Getting Started notebook](https://colab.research.google.com/drive/1hzYhcyvbXYMAUwa3515BszSkhx1UUFSt).
+
 ## Documentation
 ### TensorFlow API
 ```python
 import haste_tf as haste
 
-norm_lstm_layer = haste.LayerNormLSTM(num_units=256, direction='bidirectional', zoneout=0.1, dropout=0.05)
-lstm_layer = haste.LSTM(num_units=256, direction='bidirectional', zoneout=0.1, dropout=0.05)
 gru_layer = haste.GRU(num_units=256, direction='bidirectional', zoneout=0.1, dropout=0.05)
+indrnn_layer = haste.IndRNN(num_units=256, direction='bidirectional', zoneout=0.1)
+lstm_layer = haste.LSTM(num_units=256, direction='bidirectional', zoneout=0.1, dropout=0.05)
+norm_gru_layer = haste.LayerNormGRU(num_units=256, direction='bidirectional', zoneout=0.1, dropout=0.05)
+norm_lstm_layer = haste.LayerNormLSTM(num_units=256, direction='bidirectional', zoneout=0.1, dropout=0.05)
 
 # `x` is a tensor with shape [N,T,C]
 x = tf.random.normal([5, 25, 128])
 
-y, state = lstm_layer(x, training=True)
 y, state = gru_layer(x, training=True)
+y, state = indrnn_layer(x, training=True)
+y, state = lstm_layer(x, training=True)
+y, state = norm_gru_layer(x, training=True)
+y, state = norm_lstm_layer(x, training=True)
 ```
 
 The TensorFlow Python API is documented in [`docs/tf/haste_tf.md`](docs/tf/haste_tf.md).
@@ -92,20 +107,26 @@ The TensorFlow Python API is documented in [`docs/tf/haste_tf.md`](docs/tf/haste
 import torch
 import haste_pytorch as haste
 
-norm_lstm_layer = haste.LayerNormLSTM(input_size=128, hidden_size=256, zoneout=0.1, dropout=0.05)
-lstm_layer = haste.LSTM(input_size=128, hidden_size=256, zoneout=0.1, dropout=0.05)
 gru_layer = haste.GRU(input_size=128, hidden_size=256, zoneout=0.1, dropout=0.05)
+indrnn_layer = haste.IndRNN(input_size=128, hidden_size=256, zoneout=0.1)
+lstm_layer = haste.LSTM(input_size=128, hidden_size=256, zoneout=0.1, dropout=0.05)
+norm_gru_layer = haste.LayerNormGRU(input_size=128, hidden_size=256, zoneout=0.1, dropout=0.05)
+norm_lstm_layer = haste.LayerNormLSTM(input_size=128, hidden_size=256, zoneout=0.1, dropout=0.05)
 
-norm_lstm_layer.cuda()
-lstm_layer.cuda()
 gru_layer.cuda()
+indrnn_layer.cuda()
+lstm_layer.cuda()
+norm_gru_layer.cuda()
+norm_lstm_layer.cuda()
 
 # `x` is a CUDA tensor with shape [T,N,C]
 x = torch.rand([25, 5, 128]).cuda()
 
-y, state = norm_lstm_layer(x)
-y, state = lstm_layer(x)
 y, state = gru_layer(x)
+y, state = indrnn_layer(x)
+y, state = lstm_layer(x)
+y, state = norm_gru_layer(x)
+y, state = norm_lstm_layer(x)
 ```
 
 The PyTorch API is documented in [`docs/pytorch/haste_pytorch.md`](docs/pytorch/haste_pytorch.md).
