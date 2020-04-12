@@ -98,6 +98,10 @@ class LayerNormLSTMLayer(tf.Module):
     self.recurrent_config = WeightConfig(v1.initializers.orthogonal(), None, identity)
     self.bias_config = WeightConfig(v1.initializers.zeros(), None, identity)
 
+    self.kernel_config.override(kernel_initializer, None, kernel_transform)
+    self.recurrent_config.override(recurrent_initializer, None, recurrent_transform)
+    self.bias_config.override(bias_initializer, None, bias_transform)
+
     self.forget_bias = forget_bias
     self.dropout = dropout
     self.zoneout = zoneout
