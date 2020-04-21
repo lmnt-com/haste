@@ -73,6 +73,7 @@ elif sys.argv[1] == 'haste_pytorch':
   from platform import platform
   from torch.utils import cpp_extension
 
+  base_path = os.path.dirname(os.path.realpath(__file__))
   if 'Windows' in platform():
     CUDA_HOME = os.environ.get('CUDA_HOME', os.environ.get('CUDA_PATH'))
     extra_args = []
@@ -84,7 +85,7 @@ elif sys.argv[1] == 'haste_pytorch':
       'haste_pytorch_lib',
       sources = glob('pytorch/*.cc'),
       extra_compile_args = extra_args,
-      include_dirs = ['lib', os.path.join(CUDA_HOME, 'include')],
+      include_dirs = [os.path.join(base_path, 'lib'), os.path.join(CUDA_HOME, 'include')],
       libraries = ['haste', 'cublas', 'cudart'],
       library_dirs = ['.', os.path.join(CUDA_HOME, 'lib64'), os.path.join(CUDA_HOME, 'lib', 'x64')])
   setup(name = 'haste_pytorch',
