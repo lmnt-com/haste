@@ -17,6 +17,7 @@
 Haste: a fast, simple, and open RNN library.
 """
 
+import torch as _
 
 from .gru import GRU
 from .indrnn import IndRNN
