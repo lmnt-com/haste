@@ -16,10 +16,10 @@
 import argparse
 import numpy as np
 import tensorflow as tf
+import haste_tf
 import torch
 import torch.nn as nn
 import haste_pytorch
-import haste_tf
 
 
 def stfu():
