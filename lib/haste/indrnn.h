@@ -30,7 +30,8 @@ class ForwardPass {
         const int batch_size,
         const int input_size,
         const int hidden_size,
-        const cublasHandle_t& blas_handle);
+        const cublasHandle_t& blas_handle,
+        const cudaStream_t& stream = 0);
 
     ~ForwardPass();
 
@@ -57,7 +58,8 @@ class BackwardPass {
         const int batch_size,
         const int input_size,
         const int hidden_size,
-        const cublasHandle_t& blas_handle);
+        const cublasHandle_t& blas_handle,
+        const cudaStream_t& stream = 0);
 
     ~BackwardPass();
 

@@ -116,7 +116,8 @@ BackwardPass<T>::BackwardPass(
     const int batch_size,
     const int input_size,
     const int hidden_size,
-    const cublasHandle_t& blas_handle) : data_(new private_data) {
+    const cublasHandle_t& blas_handle,
+    const cudaStream_t& stream) : data_(new private_data) {
   data_->batch_size = batch_size;
   data_->input_size = input_size;
   data_->hidden_size = hidden_size;

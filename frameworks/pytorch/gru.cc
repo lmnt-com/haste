@@ -64,7 +64,8 @@ std::vector<Tensor> gru_forward(
         batch_size,
         input_size,
         hidden_size,
-        at::cuda::getCurrentCUDABlasHandle());
+        at::cuda::getCurrentCUDABlasHandle(),
+        at::cuda::getCurrentCUDAStream());
 
     forward.Run(
         time_steps,
@@ -124,7 +125,8 @@ std::vector<Tensor> gru_backward(
         batch_size,
         input_size,
         hidden_size,
-        at::cuda::getCurrentCUDABlasHandle());
+        at::cuda::getCurrentCUDABlasHandle(),
+        at::cuda::getCurrentCUDAStream());
 
     backward.Run(
         time_steps,

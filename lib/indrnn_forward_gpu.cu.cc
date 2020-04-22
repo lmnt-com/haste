@@ -76,6 +76,7 @@ struct ForwardPass<T>::private_data {
   int hidden_size;
   cublasHandle_t blas_handle;
   cudaStream_t stream;
+  cudaStream_t sync_stream;
 };
 
 template<typename T>
@@ -84,18 +85,28 @@ ForwardPass<T>::ForwardPass(
     const int batch_size,
     const int input_size,
     const int hidden_size,
-    const cublasHandle_t& blas_handle) : data_(new private_data) {
+    const cublasHandle_t& blas_handle,
+    const cudaStream_t& stream) : data_(new private_data) {
   data_->training = training;
   data_->batch_size = batch_size;
   data_->input_size = input_size;
   data_->hidden_size = hidden_size;
   data_->blas_handle = blas_handle;
+  data_->sync_stream = stream;
   cudaStreamCreate(&data_->stream);
 }
 
 template<typename T>
 ForwardPass<T>::~ForwardPass() {
-  cudaStreamSynchronize(data_->stream);
+  if (data_->sync_stream) {
+    cudaEvent_t event;
+    cudaEventCreateWithFlags(&event, cudaEventDisableTiming);
+    cudaEventRecord(event, data_->stream);
+    cudaStreamWaitEvent(data_->sync_stream, event, 0);
+    cudaEventDestroy(event);
+  } else {
+    cudaStreamSynchronize(data_->stream);
+  }
   cudaStreamDestroy(data_->stream);
   delete data_;
 }

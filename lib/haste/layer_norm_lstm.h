@@ -16,6 +16,7 @@
 #pragma once
 
 #include <cublas_v2.h>
+#include <cuda_runtime_api.h>
 
 namespace haste {
 namespace v0 {
@@ -34,7 +35,8 @@ class ForwardPass {
         const int batch_size,
         const int input_size,
         const int hidden_size,
-        const cublasHandle_t& blas_handle);
+        const cublasHandle_t& blas_handle,
+        const cudaStream_t& stream = 0);
 
     // Releases internal resources.
     // Blocks until all iterations have completed executing on the GPU.
@@ -121,7 +123,8 @@ class BackwardPass {
         const int batch_size,
         const int input_size,
         const int hidden_size,
-        const cublasHandle_t& blas_handle);
+        const cublasHandle_t& blas_handle,
+        const cudaStream_t& stream = 0);
 
     // Releases internal resources.
     // Blocks until all iterations have completed executing on the GPU.

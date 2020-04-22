@@ -86,7 +86,8 @@ std::vector<Tensor> layer_norm_gru_forward(
         batch_size,
         input_size,
         hidden_size,
-        at::cuda::getCurrentCUDABlasHandle());
+        at::cuda::getCurrentCUDABlasHandle(),
+        at::cuda::getCurrentCUDAStream());
 
     gru.Run(
         time_steps,
@@ -184,7 +185,8 @@ std::vector<Tensor> layer_norm_gru_backward(
         batch_size,
         input_size,
         hidden_size,
-        at::cuda::getCurrentCUDABlasHandle());
+        at::cuda::getCurrentCUDABlasHandle(),
+        at::cuda::getCurrentCUDAStream());
 
     gru.Run(
         time_steps,

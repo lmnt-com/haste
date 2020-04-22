@@ -100,7 +100,8 @@ std::vector<Tensor> layer_norm_lstm_forward(
         batch_size,
         input_size,
         hidden_size,
-        at::cuda::getCurrentCUDABlasHandle());
+        at::cuda::getCurrentCUDABlasHandle(),
+        at::cuda::getCurrentCUDAStream());
 
     lstm.Run(
         time_steps,
@@ -229,7 +230,8 @@ std::vector<Tensor> layer_norm_lstm_backward(
         batch_size,
         input_size,
         hidden_size,
-        at::cuda::getCurrentCUDABlasHandle());
+        at::cuda::getCurrentCUDABlasHandle(),
+        at::cuda::getCurrentCUDAStream());
 
     lstm.Run(
         time_steps,
