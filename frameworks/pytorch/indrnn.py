@@ -88,7 +88,8 @@ class IndRNN(BaseRNN):
       input_size,
       hidden_size,
       batch_first=False,
-      zoneout=0.0):
+      zoneout=0.0,
+      return_state_sequence=False):
     """
     Initialize the parameters of the IndRNN layer.
 
@@ -99,6 +100,10 @@ class IndRNN(BaseRNN):
         tensors are provided as `(batch, seq, feature)`.
       zoneout: (optional) float, sets the zoneout rate for Zoneout
         regularization.
+      return_state_sequence: (optional) bool, if `True`, the forward pass will
+        return the entire state sequence instead of just the final state. Note
+        that if the input is a padded sequence, the returned state will also
+        be a padded sequence.
 
     Variables:
       kernel: the input projection weight matrix. Dimensions
@@ -111,7 +116,7 @@ class IndRNN(BaseRNN):
         details.
       bias: the RNN bias vector. Dimensions (hidden_size). Initialized to zeros.
     """
-    super().__init__(input_size, hidden_size, batch_first, zoneout)
+    super().__init__(input_size, hidden_size, batch_first, zoneout, return_state_sequence)
 
     if zoneout < 0 or zoneout > 1:
       raise ValueError('IndRNN: zoneout must be in [0.0, 1.0]')

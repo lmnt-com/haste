@@ -109,7 +109,8 @@ class LSTM(BaseRNN):
       batch_first=False,
       forget_bias=1.0,
       dropout=0.0,
-      zoneout=0.0):
+      zoneout=0.0,
+      return_state_sequence=False):
     """
     Initialize the parameters of the LSTM layer.
 
@@ -124,6 +125,10 @@ class LSTM(BaseRNN):
         regularization on the recurrent matrix.
       zoneout: (optional) float, sets the zoneout rate for Zoneout
         regularization.
+      return_state_sequence: (optional) bool, if `True`, the forward pass will
+        return the entire state sequence instead of just the final state. Note
+        that if the input is a padded sequence, the returned state will also
+        be a padded sequence.
 
     Variables:
       kernel: the input projection weight matrix. Dimensions
@@ -136,7 +141,7 @@ class LSTM(BaseRNN):
         `i,g,f,o` gate layout. The forget gate biases are initialized to
         `forget_bias` and the rest are zeros.
     """
-    super().__init__(input_size, hidden_size, batch_first, zoneout)
+    super().__init__(input_size, hidden_size, batch_first, zoneout, return_state_sequence)
 
     if dropout < 0 or dropout > 1:
       raise ValueError('LSTM: dropout must be in [0.0, 1.0]')

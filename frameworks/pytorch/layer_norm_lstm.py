@@ -112,7 +112,8 @@ class LayerNormLSTM(BaseRNN):
       batch_first=False,
       forget_bias=1.0,
       dropout=0.0,
-      zoneout=0.0):
+      zoneout=0.0,
+      return_state_sequence=False):
     """
     Initialize the parameters of the LSTM layer.
 
@@ -127,6 +128,10 @@ class LayerNormLSTM(BaseRNN):
         regularization on the recurrent matrix.
       zoneout: (optional) float, sets the zoneout rate for Zoneout
         regularization.
+      return_state_sequence: (optional) bool, if `True`, the forward pass will
+        return the entire state sequence instead of just the final state. Note
+        that if the input is a padded sequence, the returned state will also
+        be a padded sequence.
 
     Variables:
       kernel: the input projection weight matrix. Dimensions
@@ -146,7 +151,7 @@ class LayerNormLSTM(BaseRNN):
       beta_h: the output normalization bias. Dimensions (hidden_size).
         Initialized to zeros.
     """
-    super().__init__(input_size, hidden_size, batch_first, zoneout)
+    super().__init__(input_size, hidden_size, batch_first, zoneout, return_state_sequence)
 
     if dropout < 0 or dropout > 1:
       raise ValueError('LayerNormLSTM: dropout must be in [0.0, 1.0]')

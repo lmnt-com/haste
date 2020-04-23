@@ -112,7 +112,8 @@ class GRU(BaseRNN):
       hidden_size,
       batch_first=False,
       dropout=0.0,
-      zoneout=0.0):
+      zoneout=0.0,
+      return_state_sequence=False):
     """
     Initialize the parameters of the GRU layer.
 
@@ -125,6 +126,10 @@ class GRU(BaseRNN):
         regularization on the recurrent matrix.
       zoneout: (optional) float, sets the zoneout rate for Zoneout
         regularization.
+      return_state_sequence: (optional) bool, if `True`, the forward pass will
+        return the entire state sequence instead of just the final state. Note
+        that if the input is a padded sequence, the returned state will also
+        be a padded sequence.
 
     Variables:
       kernel: the input projection weight matrix. Dimensions
@@ -138,7 +143,7 @@ class GRU(BaseRNN):
       recurrent_bias: the recurrent projection bias vector. Dimensions
         (hidden_size * 3) with `z,r,h` gate layout. Initialized to zeros.
     """
-    super().__init__(input_size, hidden_size, batch_first, zoneout)
+    super().__init__(input_size, hidden_size, batch_first, zoneout, return_state_sequence)
 
     if dropout < 0 or dropout > 1:
       raise ValueError('GRU: dropout must be in [0.0, 1.0]')

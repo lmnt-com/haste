@@ -28,12 +28,14 @@ class BaseRNN(nn.Module):
       input_size,
       hidden_size,
       batch_first,
-      zoneout):
+      zoneout,
+      return_state_sequence):
     super().__init__()
     self.input_size = input_size
     self.hidden_size = hidden_size
     self.batch_first = batch_first
     self.zoneout = zoneout
+    self.return_state_sequence = return_state_sequence
 
   def _permute(self, x):
     if self.batch_first:
@@ -52,6 +54,8 @@ class BaseRNN(nn.Module):
       return tuple(self._get_final_state(s, lengths) for s in state)
     if isinstance(state, list):
       return [self._get_final_state(s, lengths) for s in state]
+    if self.return_state_sequence:
+      return self._permute(state[1:]).unsqueeze(0)
     if lengths is not None:
       cols = range(state.size(1))
       return state[[lengths, cols]].unsqueeze(0)
