@@ -14,6 +14,7 @@
 // ==============================================================================
 
 #include <ATen/cuda/CUDAContext.h>
+#include <c10/cuda/CUDAGuard.h>
 #include <torch/extension.h>
 #include <vector>
 
@@ -51,10 +52,12 @@ std::vector<Tensor> lstm_forward(
   CHECK_INPUT(bias);
   CHECK_INPUT(zoneout_mask);
 
-  Tensor output = torch::empty({ time_steps + 1, batch_size, hidden_size }, at::kCUDA);
-  Tensor output_state = torch::empty({ time_steps + 1, batch_size, hidden_size }, at::kCUDA);
-  Tensor cache = torch::empty({ time_steps, batch_size, hidden_size * 4 }, at::kCUDA);
-  Tensor tmp_Rh = torch::empty({ batch_size, hidden_size * 4 }, at::kCUDA);
+  const auto options = x.options();
+  const at::cuda::CUDAGuard guard(options.device_index());
+  Tensor output = torch::empty({ time_steps + 1, batch_size, hidden_size }, options);
+  Tensor output_state = torch::empty({ time_steps + 1, batch_size, hidden_size }, options);
+  Tensor cache = torch::empty({ time_steps, batch_size, hidden_size * 4 }, options);
+  Tensor tmp_Rh = torch::empty({ batch_size, hidden_size * 4 }, options);
 
   output[0] = h0;
   output_state[0] = c0;
@@ -113,12 +116,14 @@ std::vector<Tensor> lstm_backward(
   CHECK_INPUT(dc_new);
   CHECK_INPUT(zoneout_mask);
 
-  Tensor dx = torch::empty({ time_steps, batch_size, input_size }, at::kCUDA);
-  Tensor dW = torch::zeros({ input_size, hidden_size * 4 }, at::kCUDA);
-  Tensor dR = torch::zeros({ hidden_size, hidden_size * 4 }, at::kCUDA);
+  const auto options = x_t.options();
+  const at::cuda::CUDAGuard guard(options.device_index());
+  Tensor dx = torch::empty({ time_steps, batch_size, input_size }, options);
+  Tensor dW = torch::zeros({ input_size, hidden_size * 4 }, options);
+  Tensor dR = torch::zeros({ hidden_size, hidden_size * 4 }, options);
   Tensor db = torch::zeros_like(bias);
-  Tensor dh = torch::zeros({ batch_size, hidden_size }, at::kCUDA);
-  Tensor dc = torch::zeros({ batch_size, hidden_size }, at::kCUDA);
+  Tensor dh = torch::zeros({ batch_size, hidden_size }, options);
+  Tensor dc = torch::zeros({ batch_size, hidden_size }, options);
 
   AT_DISPATCH_FLOATING_TYPES(x_t.scalar_type(), "lstm_backward", ([&] {
     BackwardPass<scalar_t> backward(

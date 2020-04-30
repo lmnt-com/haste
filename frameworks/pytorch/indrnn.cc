@@ -14,6 +14,7 @@
 // ==============================================================================
 
 #include <ATen/cuda/CUDAContext.h>
+#include <c10/cuda/CUDAGuard.h>
 #include <torch/extension.h>
 #include <vector>
 
@@ -49,8 +50,10 @@ Tensor indrnn_forward(
   CHECK_INPUT(bias);
   CHECK_INPUT(zoneout_mask);
 
-  Tensor output = torch::empty({ time_steps + 1, batch_size, hidden_size }, at::kCUDA);
-  Tensor workspace = torch::empty({ time_steps, batch_size, hidden_size }, at::kCUDA);
+  const auto options = x.options();
+  const at::cuda::CUDAGuard guard(options.device_index());
+  Tensor output = torch::empty({ time_steps + 1, batch_size, hidden_size }, options);
+  Tensor workspace = torch::empty({ time_steps, batch_size, hidden_size }, options);
 
   output[0] = h0;
 
@@ -100,12 +103,14 @@ std::vector<Tensor> indrnn_backward(
   CHECK_INPUT(h);
   CHECK_INPUT(dh_new);
 
-  Tensor dx = torch::empty({ time_steps, batch_size, input_size }, at::kCUDA);
-  Tensor dW = torch::zeros({ input_size, hidden_size }, at::kCUDA);
-  Tensor du = torch::zeros({ hidden_size }, at::kCUDA);
+  const auto options = x_t.options();
+  const at::cuda::CUDAGuard guard(options.device_index());
+  Tensor dx = torch::empty({ time_steps, batch_size, input_size }, options);
+  Tensor dW = torch::zeros({ input_size, hidden_size }, options);
+  Tensor du = torch::zeros({ hidden_size }, options);
   Tensor db = torch::zeros_like(bias);
-  Tensor dh = torch::zeros({ batch_size, hidden_size }, at::kCUDA);
-  Tensor workspace = torch::empty({ time_steps, batch_size, hidden_size }, at::kCUDA);
+  Tensor dh = torch::zeros({ batch_size, hidden_size }, options);
+  Tensor workspace = torch::empty({ time_steps, batch_size, hidden_size }, options);
 
   AT_DISPATCH_FLOATING_TYPES(x_t.scalar_type(), "indrnn_backward", ([&] {
     BackwardPass<scalar_t> backward(

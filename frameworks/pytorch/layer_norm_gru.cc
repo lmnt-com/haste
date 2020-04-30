@@ -14,6 +14,7 @@
 // ==============================================================================
 
 #include <ATen/cuda/CUDAContext.h>
+#include <c10/cuda/CUDAGuard.h>
 #include <torch/extension.h>
 #include <vector>
 
@@ -53,14 +54,16 @@ std::vector<Tensor> layer_norm_gru_forward(
   CHECK_INPUT(gamma);
   CHECK_INPUT(zoneout_mask);
 
-  Tensor output = torch::empty({ time_steps + 1, batch_size, hidden_size }, at::kCUDA);
-  Tensor cache = torch::empty({ time_steps, batch_size, hidden_size * 4 }, at::kCUDA);
-  Tensor act_Wx = torch::empty({ time_steps, batch_size, hidden_size * 3 }, at::kCUDA);
-  Tensor tmp_Wx_norm = torch::empty({ time_steps, batch_size, hidden_size * 3 }, at::kCUDA);
-  Tensor act_Wx_norm_cache = torch::empty({ time_steps, batch_size, 2 }, at::kCUDA);
-  Tensor act_Rh = torch::empty({ time_steps, batch_size, hidden_size * 3 }, at::kCUDA);
-  Tensor tmp_Rh_norm = torch::empty({ batch_size, hidden_size * 3 }, at::kCUDA);
-  Tensor act_Rh_norm_cache = torch::empty({ time_steps, batch_size, 2 }, at::kCUDA);
+  const auto options = x.options();
+  const at::cuda::CUDAGuard guard(options.device_index());
+  Tensor output = torch::empty({ time_steps + 1, batch_size, hidden_size }, options);
+  Tensor cache = torch::empty({ time_steps, batch_size, hidden_size * 4 }, options);
+  Tensor act_Wx = torch::empty({ time_steps, batch_size, hidden_size * 3 }, options);
+  Tensor tmp_Wx_norm = torch::empty({ time_steps, batch_size, hidden_size * 3 }, options);
+  Tensor act_Wx_norm_cache = torch::empty({ time_steps, batch_size, 2 }, options);
+  Tensor act_Rh = torch::empty({ time_steps, batch_size, hidden_size * 3 }, options);
+  Tensor tmp_Rh_norm = torch::empty({ batch_size, hidden_size * 3 }, options);
+  Tensor act_Rh_norm_cache = torch::empty({ time_steps, batch_size, 2 }, options);
 
   output[0] = h0;
 
@@ -147,14 +150,16 @@ std::vector<Tensor> layer_norm_gru_backward(
   CHECK_INPUT(dh_new);
   CHECK_INPUT(zoneout_mask);
 
-  Tensor dx = torch::empty({ time_steps, batch_size, input_size }, at::kCUDA);
-  Tensor dW = torch::zeros({ input_size, hidden_size * 3 }, at::kCUDA);
-  Tensor dR = torch::zeros({ hidden_size, hidden_size * 3 }, at::kCUDA);
-  Tensor dbx = torch::zeros({ hidden_size * 3 }, at::kCUDA);
-  Tensor dbr = torch::zeros({ hidden_size * 3 }, at::kCUDA);
-  Tensor dh = torch::zeros({ batch_size, hidden_size }, at::kCUDA);
-  Tensor dp = torch::empty({ time_steps, batch_size, hidden_size * 3 }, at::kCUDA);
-  Tensor dq = torch::empty({ time_steps, batch_size, hidden_size * 3 }, at::kCUDA);
+  const auto options = x_t.options();
+  const at::cuda::CUDAGuard guard(options.device_index());
+  Tensor dx = torch::empty({ time_steps, batch_size, input_size }, options);
+  Tensor dW = torch::zeros({ input_size, hidden_size * 3 }, options);
+  Tensor dR = torch::zeros({ hidden_size, hidden_size * 3 }, options);
+  Tensor dbx = torch::zeros({ hidden_size * 3 }, options);
+  Tensor dbr = torch::zeros({ hidden_size * 3 }, options);
+  Tensor dh = torch::zeros({ batch_size, hidden_size }, options);
+  Tensor dp = torch::empty({ time_steps, batch_size, hidden_size * 3 }, options);
+  Tensor dq = torch::empty({ time_steps, batch_size, hidden_size * 3 }, options);
   Tensor dgamma = torch::zeros_like(gamma);
 
   AT_DISPATCH_FLOATING_TYPES(x_t.scalar_type(), "layer_norm_gru_backward", ([&] {
