@@ -142,7 +142,7 @@ class LayerNormGRU(BaseRNN):
       recurrent_bias: the recurrent projection bias vector. Dimensions
         (hidden_size * 3) with `z,r,h` gate layout. Initialized to zeros.
       gamma: the input and recurrent normalization gain. Dimensions
-        (2, hidden_size * 4) with `gamma[0]` specifying the input gain and
+        (2, hidden_size * 3) with `gamma[0]` specifying the input gain and
         `gamma[1]` specifying the recurrent gain. Initialized to ones.
     """
     super().__init__(input_size, hidden_size, batch_first, zoneout, return_state_sequence)
