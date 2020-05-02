@@ -51,8 +51,8 @@ def self_consistency(rnn, x):
   g1 = x_cpu.grad.data
   g2 = x_cuda.grad.data
 
-  print(torch.max(y1.cpu()-y2.cpu()))
-  print(torch.max(g1.cpu()-g2.cpu()))
+  print(torch.max(torch.abs(y1.cpu()-y2.cpu())))
+  print(torch.max(torch.abs(g1.cpu()-g2.cpu())))
 
 
 def native_consistency(haste_rnn, pytorch_rnn, x):
@@ -78,8 +78,8 @@ def native_consistency(haste_rnn, pytorch_rnn, x):
   g1 = x1.grad.data
   g2 = x2.grad.data
 
-  print(torch.max(y1-y2))
-  print(torch.max(g1-g2))
+  print(torch.max(torch.abs(y1-y2)))
+  print(torch.max(torch.abs(g1-g2)))
 
 
 def run_rnn(rnn_type, x):
