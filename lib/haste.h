@@ -29,5 +29,6 @@
 #include "haste/indrnn.h"
 #include "haste/layer_norm.h"
 #include "haste/layer_norm_gru.h"
+#include "haste/layer_norm_indrnn.h"
 #include "haste/layer_norm_lstm.h"
 #include "haste/lstm.h"

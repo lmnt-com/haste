@@ -23,6 +23,7 @@ from .gru import GRU
 from .indrnn import IndRNN
 from .lstm import LSTM
 from .layer_norm_gru import LayerNormGRU
+from .layer_norm_indrnn import LayerNormIndRNN
 from .layer_norm_lstm import LayerNormLSTM
 
 __all__ = [
@@ -30,5 +31,6 @@ __all__ = [
     'IndRNN',
     'LSTM',
     'LayerNormGRU',
+    'LayerNormIndRNN',
     'LayerNormLSTM'
 ]

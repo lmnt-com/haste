@@ -19,6 +19,7 @@ void gru_init(py::module&);
 void indrnn_init(py::module&);
 void lstm_init(py::module&);
 void layer_norm_gru_init(py::module&);
+void layer_norm_indrnn_init(py::module&);
 void layer_norm_lstm_init(py::module&);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
@@ -26,5 +27,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   indrnn_init(m);
   lstm_init(m);
   layer_norm_gru_init(m);
+  layer_norm_indrnn_init(m);
   layer_norm_lstm_init(m);
 }
