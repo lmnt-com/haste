@@ -50,6 +50,10 @@ class BinaryDistribution(Distribution):
 
 if sys.argv[1] == 'haste_tf':
   del sys.argv[1]
+
+  with open(f'tf/_version.py', 'wt') as f:
+    f.write(f'__version__ = "{VERSION}"')
+
   setup(name = 'haste_tf',
       version = VERSION,
       description = DESCRIPTION,
@@ -80,6 +84,9 @@ elif sys.argv[1] == 'haste_pytorch':
   else:
     CUDA_HOME = os.environ.get('CUDA_HOME', '/usr/local/cuda')
     extra_args = ['-Wno-sign-compare']
+
+  with open(f'pytorch/_version.py', 'wt') as f:
+    f.write(f'__version__ = "{VERSION}"')
 
   extension = cpp_extension.CppExtension(
       'haste_pytorch_lib',

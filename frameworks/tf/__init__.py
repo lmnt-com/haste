@@ -18,6 +18,7 @@ Haste: a fast, simple, and open RNN library.
 """
 
 
+from ._version import __version__  # generated in setup.py
 from .gru import GRU
 from .gru_cell import GRUCell
 from .indrnn import IndRNN

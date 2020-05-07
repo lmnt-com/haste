@@ -192,7 +192,7 @@ class LayerNormGRU(BaseRNN):
     Initialize the parameters of the GRU layer.
 
     Arguments:
-      num_units: int, the number of units in the LSTM cell.
+      num_units: int, the number of units in the GRU cell.
       direction: string, 'unidirectional' or 'bidirectional'.
       **kwargs: Dict, keyword arguments (see below).
 

@@ -19,6 +19,7 @@ Haste: a fast, simple, and open RNN library.
 
 import torch as _
 
+from ._version import __version__  # generated in setup.py
 from .gru import GRU
 from .indrnn import IndRNN
 from .lstm import LSTM
