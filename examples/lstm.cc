@@ -250,6 +250,7 @@ void LstmTrainIterative(const Tensor2& W, const Tensor2& R, const Tensor1& b, co
     const int NH = batch_size * hidden_size;
     for (int t = 0; t < time_steps; ++t) {
       forward.Iterate(
+          0,
           W_dev.data,
           R_dev.data,
           b_dev.data,
@@ -306,6 +307,7 @@ void LstmTrainIterative(const Tensor2& W, const Tensor2& R, const Tensor1& b, co
     const int NH = batch_size * hidden_size;
     for (int t = time_steps - 1; t >= 0; --t) {
       backward.Iterate(
+          0,
           W_t_dev.data,
           R_t_dev.data,
           b_dev.data,

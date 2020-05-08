@@ -71,6 +71,7 @@ class ForwardPass {
     //     following a Bernoulli(1-zoneout_prob) distribution. A different mask is typically
     //     used for each iteration.
     void Iterate(
+        const cudaStream_t& stream,
         const T* W,
         const T* R,
         const T* b,
@@ -198,6 +199,7 @@ class BackwardPass {
     // zoneout_mask: [N,H] may be null if zoneout was disabled in the forward pass. This vector
     //     must be the same as the one provided during the corresponding forward iteration.
     void Iterate(
+        const cudaStream_t& stream,
         const T* W_t,
         const T* R_t,
         const T* b,

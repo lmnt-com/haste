@@ -142,6 +142,7 @@ BackwardPass<T>::~BackwardPass() {
 
 template<typename T>
 void BackwardPass<T>::Iterate(
+    const cudaStream_t& stream,
     const T* W_t,     // [H*4,C]
     const T* R_t,     // [H*4,H]
     const T* b,       // [H*4]
@@ -167,12 +168,19 @@ void BackwardPass<T>::Iterate(
   const int input_size = data_->input_size;
   const int hidden_size = data_->hidden_size;
   const cublasHandle_t blas_handle = data_->blas_handle;
+  const cudaStream_t stream1 = data_->stream[0];
   const cudaStream_t stream2 = data_->stream[1];
   const cudaStream_t stream3 = data_->stream[2];
   const cudaEvent_t event = data_->event;
 
   cudaStream_t save_stream;
   cublasGetStream(blas_handle, &save_stream);
+
+  // Make sure inputs are ready before using them.
+  if (stream) {
+    cudaEventRecord(event, stream);
+    cudaStreamWaitEvent(stream1, event, 0);
+  }
 
   IterateInternal(
       R_t,
@@ -200,6 +208,15 @@ void BackwardPass<T>::Iterate(
       v, hidden_size * 4,
       &beta_assign,
       dx, input_size);
+
+  // We can get away with only waiting for the `dx` and `dh` outputs and
+  // let the `dR` and `dW` matrices complete whenever they complete. It's
+  // a little unsafe, but we make the assumption that callers won't have
+  // upstream data-dependencies on those matrices.
+  if (stream) {
+    cudaEventRecord(event, stream2);
+    cudaStreamWaitEvent(stream, event, 0);
+  }
 
   cublasSetStream(blas_handle, stream3);
   blas<T>::gemm(blas_handle,

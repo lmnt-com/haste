@@ -139,6 +139,7 @@ ForwardPass<T>::~ForwardPass() {
 
 template<typename T>
 void ForwardPass<T>::Iterate(
+    const cudaStream_t& stream,
     const T* W,  // Weight matrix for input (Wx) [C,H*4]
     const T* R,  // Weight matrix for recurrent state (Rh) [H,H*4]
     const T* b,  // Bias for gates (Wx + Rh + b) [H*4]
@@ -159,11 +160,18 @@ void ForwardPass<T>::Iterate(
   const int input_size = data_->input_size;
   const int hidden_size = data_->hidden_size;
   const cublasHandle_t blas_handle = data_->blas_handle;
+  const cudaStream_t stream1 = data_->stream[0];
   const cudaStream_t stream2 = data_->stream[1];
   const cudaEvent_t event = data_->event;
 
   cudaStream_t save_stream;
   cublasGetStream(blas_handle, &save_stream);
+
+  // Make sure inputs are ready before we use them.
+  if (stream) {
+    cudaEventRecord(event, stream);
+    cudaStreamWaitEvent(stream2, event, 0);
+  }
 
   cublasSetStream(blas_handle, stream2);
   blas<T>::gemm(blas_handle,
@@ -187,6 +195,12 @@ void ForwardPass<T>::Iterate(
       tmp_Rh,
       zoneout_prob,
       zoneout_mask);
+
+  // Make sure outputs have settled.
+  if (stream) {
+    cudaEventRecord(event, stream1);
+    cudaStreamWaitEvent(stream, event, 0);
+  }
 
   cublasSetStream(blas_handle, save_stream);
 }
