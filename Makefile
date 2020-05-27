@@ -1,6 +1,6 @@
 AR ?= ar
 CXX ?= g++
-NVCC ?= nvcc
+NVCC ?= nvcc -ccbin $(CXX)
 PYTHON ?= python
 
 LOCAL_CFLAGS := -I/usr/include/eigen3 -I/usr/local/cuda/include -Ilib -O3
