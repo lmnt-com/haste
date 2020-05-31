@@ -5,6 +5,7 @@ PYTHON ?= python
 
 LOCAL_CFLAGS := -I/usr/include/eigen3 -I/usr/local/cuda/include -Ilib -O3
 LOCAL_LDFLAGS := -L/usr/local/cuda/lib64 -L. -lcudart -lcublas
+GPU_ARCH_FLAGS := -gencode arch=compute_37,code=sm_37 -gencode arch=compute_60,code=sm_60
 
 ifeq ($(OS),Windows_NT)
 LIBHASTE := haste.lib
@@ -26,20 +27,20 @@ endif
 all: haste haste_tf haste_pytorch examples benchmarks
 
 haste:
-	$(NVCC) -arch=sm_60 -c lib/lstm_forward_gpu.cu.cc -o lib/lstm_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
-	$(NVCC) -arch=sm_60 -c lib/lstm_backward_gpu.cu.cc -o lib/lstm_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
-	$(NVCC) -arch=sm_60 -c lib/gru_forward_gpu.cu.cc -o lib/gru_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
-	$(NVCC) -arch=sm_60 -c lib/gru_backward_gpu.cu.cc -o lib/gru_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
-	$(NVCC) -arch=sm_60 -c lib/layer_norm_forward_gpu.cu.cc -o lib/layer_norm_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
-	$(NVCC) -arch=sm_60 -c lib/layer_norm_backward_gpu.cu.cc -o lib/layer_norm_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
-	$(NVCC) -arch=sm_60 -c lib/layer_norm_lstm_forward_gpu.cu.cc -o lib/layer_norm_lstm_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
-	$(NVCC) -arch=sm_60 -c lib/layer_norm_lstm_backward_gpu.cu.cc -o lib/layer_norm_lstm_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
-	$(NVCC) -arch=sm_60 -c lib/layer_norm_gru_forward_gpu.cu.cc -o lib/layer_norm_gru_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
-	$(NVCC) -arch=sm_60 -c lib/layer_norm_gru_backward_gpu.cu.cc -o lib/layer_norm_gru_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
-	$(NVCC) -arch=sm_60 -c lib/indrnn_backward_gpu.cu.cc -o lib/indrnn_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
-	$(NVCC) -arch=sm_60 -c lib/indrnn_forward_gpu.cu.cc -o lib/indrnn_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
-	$(NVCC) -arch=sm_60 -c lib/layer_norm_indrnn_forward_gpu.cu.cc -o lib/layer_norm_indrnn_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
-	$(NVCC) -arch=sm_60 -c lib/layer_norm_indrnn_backward_gpu.cu.cc -o lib/layer_norm_indrnn_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
+	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/lstm_forward_gpu.cu.cc -o lib/lstm_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
+	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/lstm_backward_gpu.cu.cc -o lib/lstm_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
+	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/gru_forward_gpu.cu.cc -o lib/gru_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
+	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/gru_backward_gpu.cu.cc -o lib/gru_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
+	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/layer_norm_forward_gpu.cu.cc -o lib/layer_norm_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
+	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/layer_norm_backward_gpu.cu.cc -o lib/layer_norm_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
+	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/layer_norm_lstm_forward_gpu.cu.cc -o lib/layer_norm_lstm_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
+	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/layer_norm_lstm_backward_gpu.cu.cc -o lib/layer_norm_lstm_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
+	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/layer_norm_gru_forward_gpu.cu.cc -o lib/layer_norm_gru_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
+	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/layer_norm_gru_backward_gpu.cu.cc -o lib/layer_norm_gru_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
+	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/indrnn_backward_gpu.cu.cc -o lib/indrnn_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
+	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/indrnn_forward_gpu.cu.cc -o lib/indrnn_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
+	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/layer_norm_indrnn_forward_gpu.cu.cc -o lib/layer_norm_indrnn_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
+	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/layer_norm_indrnn_backward_gpu.cu.cc -o lib/layer_norm_indrnn_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
 	$(AR) $(AR_FLAGS) lib/*.o
 
 haste_tf: haste
