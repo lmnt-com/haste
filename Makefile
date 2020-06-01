@@ -3,10 +3,6 @@ CXX ?= g++
 NVCC ?= nvcc -ccbin $(CXX)
 PYTHON ?= python
 
-LOCAL_CFLAGS := -I/usr/include/eigen3 -I/usr/local/cuda/include -Ilib -O3
-LOCAL_LDFLAGS := -L/usr/local/cuda/lib64 -L. -lcudart -lcublas
-GPU_ARCH_FLAGS := -gencode arch=compute_37,code=compute_37 -gencode arch=compute_60,code=compute_60
-
 ifeq ($(OS),Windows_NT)
 LIBHASTE := haste.lib
 CUDA_HOME ?= $(CUDA_PATH)
@@ -20,6 +16,10 @@ AR ?= ar
 AR_FLAGS := -crv $(LIBHASTE)
 NVCC_FLAGS := -std=c++11 -x cu -Xcompiler -fPIC
 endif
+
+LOCAL_CFLAGS := -I/usr/include/eigen3 -I$(CUDA_HOME)/include -Ilib -O3
+LOCAL_LDFLAGS := -L$(CUDA_HOME)/lib64 -L. -lcudart -lcublas
+GPU_ARCH_FLAGS := -gencode arch=compute_37,code=compute_37 -gencode arch=compute_60,code=compute_60
 
 # Small enough project that we can just recompile all the time.
 .PHONY: all haste haste_tf haste_pytorch examples benchmarks clean

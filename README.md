@@ -76,6 +76,12 @@ pip install haste_tf-*.whl
 pip install haste_pytorch-*.whl
 ```
 
+If the CUDA Toolkit that you're building against is not in `/usr/local/cuda`, you must specify the
+`$CUDA_HOME` environment variable before running make:
+```
+CUDA_HOME=/usr/local/cuda-10.2 make
+```
+
 ## Google Colab
 All of the Haste APIs and executables work in Google Colab. For a quick start, take a look at the [Getting Started notebook](https://colab.research.google.com/drive/1hzYhcyvbXYMAUwa3515BszSkhx1UUFSt).
 
