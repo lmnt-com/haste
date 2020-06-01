@@ -248,7 +248,7 @@ struct HasteLayerNormIndrnnGradOp : public OpKernel {
     OP_REQUIRES_OK(context, context->allocate_output(1, dW_shape, &dW));
 
     // Needs to be initialized to 0.
-    const TensorShape du_shape = { hidden_size, hidden_size };
+    const TensorShape du_shape = { hidden_size };
     Tensor* du = nullptr;
     OP_REQUIRES_OK(context, context->allocate_output(2, du_shape, &du));
 
