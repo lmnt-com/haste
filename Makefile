@@ -5,7 +5,7 @@ PYTHON ?= python
 
 LOCAL_CFLAGS := -I/usr/include/eigen3 -I/usr/local/cuda/include -Ilib -O3
 LOCAL_LDFLAGS := -L/usr/local/cuda/lib64 -L. -lcudart -lcublas
-GPU_ARCH_FLAGS := -gencode arch=compute_37,code=sm_37 -gencode arch=compute_60,code=sm_60
+GPU_ARCH_FLAGS := -gencode arch=compute_37,code=compute_37 -gencode arch=compute_60,code=compute_60
 
 ifeq ($(OS),Windows_NT)
 LIBHASTE := haste.lib
