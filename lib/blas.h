@@ -22,15 +22,15 @@ struct blas {};
 
 template<>
 struct blas<__half> {
-  static constexpr decltype(cublasHgemm)* gemm = cublasHgemm;
+  static constexpr decltype(cublasHgemm)* gemm = &cublasHgemm;
 };
 
 template<>
 struct blas<float> {
-  static constexpr decltype(cublasSgemm)* gemm = cublasSgemm;
+  static constexpr decltype(cublasSgemm)* gemm = &cublasSgemm;
 };
 
 template<>
 struct blas<double> {
-  static constexpr decltype(cublasDgemm)* gemm = cublasDgemm;
+  static constexpr decltype(cublasDgemm)* gemm = &cublasDgemm;
 };
