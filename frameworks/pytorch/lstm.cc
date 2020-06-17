@@ -159,6 +159,6 @@ std::vector<Tensor> lstm_backward(
 }  // anonymous namespace
 
 void lstm_init(py::module& m) {
-  m.def("lstm_forward", &lstm_forward, "LSTM forward");
-  m.def("lstm_backward", &lstm_backward, "LSTM backward");
+  m.def("lstm_forward", &lstm_forward, "LSTM forward", py::call_guard<py::gil_scoped_release>());
+  m.def("lstm_backward", &lstm_backward, "LSTM backward", py::call_guard<py::gil_scoped_release>());
 }

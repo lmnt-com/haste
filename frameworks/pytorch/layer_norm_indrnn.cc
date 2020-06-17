@@ -177,6 +177,6 @@ std::vector<Tensor> layer_norm_indrnn_backward(
 }  // anonymous namespace
 
 void layer_norm_indrnn_init(py::module& m) {
-  m.def("layer_norm_indrnn_forward", &layer_norm_indrnn_forward, "LayerNormIndRNN forward");
-  m.def("layer_norm_indrnn_backward", &layer_norm_indrnn_backward, "LayerNormIndRNN backward");
+  m.def("layer_norm_indrnn_forward", &layer_norm_indrnn_forward, "LayerNormIndRNN forward", py::call_guard<py::gil_scoped_release>());
+  m.def("layer_norm_indrnn_backward", &layer_norm_indrnn_backward, "LayerNormIndRNN backward", py::call_guard<py::gil_scoped_release>());
 }

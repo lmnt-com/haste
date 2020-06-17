@@ -270,6 +270,6 @@ std::vector<Tensor> layer_norm_lstm_backward(
 }  // anonymous namespace
 
 void layer_norm_lstm_init(py::module& m) {
-  m.def("layer_norm_lstm_forward", &layer_norm_lstm_forward, "LayerNormLSTM forward");
-  m.def("layer_norm_lstm_backward", &layer_norm_lstm_backward, "LayerNormLSTM backward");
+  m.def("layer_norm_lstm_forward", &layer_norm_lstm_forward, "LayerNormLSTM forward", py::call_guard<py::gil_scoped_release>());
+  m.def("layer_norm_lstm_backward", &layer_norm_lstm_backward, "LayerNormLSTM backward", py::call_guard<py::gil_scoped_release>());
 }

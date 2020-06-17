@@ -143,6 +143,6 @@ std::vector<Tensor> indrnn_backward(
 }  // anonymous namespace
 
 void indrnn_init(py::module& m) {
-  m.def("indrnn_forward", &indrnn_forward, "IndRNN forward");
-  m.def("indrnn_backward", &indrnn_backward, "IndRNN backward");
+  m.def("indrnn_forward", &indrnn_forward, "IndRNN forward", py::call_guard<py::gil_scoped_release>());
+  m.def("indrnn_backward", &indrnn_backward, "IndRNN backward", py::call_guard<py::gil_scoped_release>());
 }

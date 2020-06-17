@@ -160,6 +160,6 @@ std::vector<Tensor> gru_backward(
 }  // anonymous namespace
 
 void gru_init(py::module& m) {
-  m.def("gru_forward", &gru_forward, "GRU forward");
-  m.def("gru_backward", &gru_backward, "GRU backward");
+  m.def("gru_forward", &gru_forward, "GRU forward", py::call_guard<py::gil_scoped_release>());
+  m.def("gru_backward", &gru_backward, "GRU backward", py::call_guard<py::gil_scoped_release>());
 }

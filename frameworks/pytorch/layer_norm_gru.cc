@@ -222,6 +222,6 @@ std::vector<Tensor> layer_norm_gru_backward(
 }  // anonymous namespace
 
 void layer_norm_gru_init(py::module& m) {
-  m.def("layer_norm_gru_forward", &layer_norm_gru_forward, "LayerNormGRU forward");
-  m.def("layer_norm_gru_backward", &layer_norm_gru_backward, "LayerNormGRU backward");
+  m.def("layer_norm_gru_forward", &layer_norm_gru_forward, "LayerNormGRU forward", py::call_guard<py::gil_scoped_release>());
+  m.def("layer_norm_gru_backward", &layer_norm_gru_backward, "LayerNormGRU backward", py::call_guard<py::gil_scoped_release>());
 }
