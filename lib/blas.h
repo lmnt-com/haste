@@ -18,7 +18,20 @@
 #include <cublas_v2.h>
 
 template<typename T>
-struct blas {};
+struct blas {
+  struct enable_tensor_cores {
+    enable_tensor_cores(cublasHandle_t handle) : handle_(handle) {
+      cublasGetMathMode(handle_, &old_mode_);
+      cublasSetMathMode(handle_, CUBLAS_TENSOR_OP_MATH);
+    }
+    ~enable_tensor_cores() {
+      cublasSetMathMode(handle_, old_mode_);
+    }
+    private:
+      cublasHandle_t handle_;
+      cublasMath_t old_mode_;
+  };
+};
 
 template<>
 struct blas<__half> {

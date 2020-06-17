@@ -15,8 +15,10 @@
 
 #include <cublas_v2.h>
 #include <cuda_runtime_api.h>
+#include <cuda_fp16.h>
 
 #include "blas.h"
+#include "device_assert.h"
 #include "haste.h"
 #include "inline_ops.h"
 
@@ -33,7 +35,7 @@ void PointwiseOperations(const int batch_dim,
                          const T* h,
                          T* h_out,
                          T* v,
-                         const float zoneout_prob,
+                         const T zoneout_prob,
                          const T* zoneout_mask) {  // Zoneout mask (only used if ApplyZoneout==true)
   const int row = blockDim.x * blockIdx.x + threadIdx.x;
   const int col = blockDim.y * blockIdx.y + threadIdx.y;
@@ -75,12 +77,30 @@ void PointwiseOperations(const int batch_dim,
     if (Training) {
       cur_h_value = (cur_h_value - h[output_idx]) * zoneout_mask[output_idx] + h[output_idx];
     } else {
-      cur_h_value = (zoneout_prob * h[output_idx]) + ((1.0f - zoneout_prob) * cur_h_value);
+      cur_h_value = (zoneout_prob * h[output_idx]) + ((static_cast<T>(1.0) - zoneout_prob) * cur_h_value);
     }
   }
 
   h_out[output_idx] = cur_h_value;
 }
+
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 700)
+template<typename T, bool Training, bool ApplyZoneout>
+__global__
+void PointwiseOperations(const int batch_dim,
+                         const int hidden_dim,
+                         const half* Wx,
+                         const half* Rh,
+                         const half* bx,
+                         const half* br,
+                         const half* h,
+                         half* h_out,
+                         half* v,
+                         const half zoneout_prob,
+                         const half* zoneout_mask) {
+  device_assert_fail("FP16 is not supported on compute capability < 7.0.");
+}
+#endif
 
 }  // anonymous namespace
 
@@ -306,6 +326,8 @@ void ForwardPass<T>::Run(
   static const T alpha = static_cast<T>(1.0);
   static const T beta = static_cast<T>(0.0);
 
+  const blas<void>::enable_tensor_cores scoped0(data_->blas_handle);
+
   const int batch_size = data_->batch_size;
   const int input_size = data_->input_size;
   const int hidden_size = data_->hidden_size;
@@ -345,6 +367,7 @@ void ForwardPass<T>::Run(
   cublasSetStream(blas_handle, save_stream);
 }
 
+template struct ForwardPass<half>;
 template struct ForwardPass<float>;
 template struct ForwardPass<double>;
 

@@ -17,6 +17,7 @@
 #include <cuda_runtime_api.h>
 
 #include "blas.h"
+#include "device_assert.h"
 #include "haste.h"
 #include "inline_ops.h"
 
@@ -93,6 +94,24 @@ void PointwiseOperations(const int batch_dim,
   atomicAdd(&dbr_out[row + 1 * hidden_dim], dq_r);
   atomicAdd(&dbr_out[row + 2 * hidden_dim], dq_g);
 }
+
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 700)
+template<typename T, bool ApplyZoneout>
+__global__
+void PointwiseOperations(const int batch_dim,
+                         const int hidden_dim,
+                         const half* h,
+                         const half* v,
+                         const half* dh_new,
+                         half* dbx_out,
+                         half* dbr_out,
+                         half* dh_inout,
+                         half* dp_out,
+                         half* dq_out,
+                         const half* zoneout_mask) {
+  device_assert_fail("FP16 is not supported on compute capability < 7.0.");
+}
+#endif
 
 }  // anonymous namespace
 
@@ -317,6 +336,8 @@ void BackwardPass<T>::Run(
     T* dp,
     T* dq,
     const T* zoneout_mask) {
+  const blas<void>::enable_tensor_cores scoped0(data_->blas_handle);
+
   const T alpha = static_cast<T>(1.0);
   const T beta_sum = static_cast<T>(1.0);
   const T beta_assign = static_cast<T>(0.0);
@@ -384,6 +405,7 @@ void BackwardPass<T>::Run(
   cublasSetStream(blas_handle, save_stream);
 }
 
+template struct BackwardPass<half>;
 template struct BackwardPass<float>;
 template struct BackwardPass<double>;
 
