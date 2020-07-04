@@ -81,10 +81,13 @@ class LayerNormLSTMCell(rnn_cell.RNNCell):
       self.null = tf.zeros_like(self.gamma[0])
     self.built = True
 
-  def __call__(self, inputs, state, scope=None):
+  def __call__(self, inputs, state, training=False, scope=None):
     self.build(inputs.shape)
 
-    R = tf.nn.dropout(self.recurrent_kernel, rate=self.dropout)
+    if training and self.dropout > 0:
+      R = tf.nn.dropout(self.recurrent_kernel, rate=self.dropout)
+    else:
+      R = self.recurrent_kernel
 
     Wx = self._layer_norm(tf.matmul(inputs, self.kernel), self.gamma[0], self.null)
     Rh = self._layer_norm(tf.matmul(state.h, R), self.gamma[1], self.null)

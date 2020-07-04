@@ -204,10 +204,14 @@ class LSTMLayer(tf.Module):
       zoneout_mask = tf.floor(zoneout_mask)
 
     weights = self.get_weights()
+    if training and self.dropout > 0:
+      recurrent_kernel = tf.nn.dropout(weights['recurrent_kernel'], rate=self.dropout)
+    else:
+      recurrent_kernel = weights['recurrent_kernel']
     h, c, _ = LIB.haste_lstm(
         x,
         weights['kernel'],
-        tf.nn.dropout(weights['recurrent_kernel'], rate=self.dropout),
+        recurrent_kernel,
         weights['bias'],
         zoneout_mask,
         training=training,

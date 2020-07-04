@@ -85,11 +85,16 @@ class LayerNormGRUCell(rnn_cell.RNNCell):
 
     self.built = True
 
-  def __call__(self, inputs, state, scope=None):
+  def __call__(self, inputs, state, training=False, scope=None):
     self.build(inputs.shape)
 
+    if training and self.dropout > 0:
+      R = tf.nn.dropout(self.recurrent_kernel, rate=self.dropout)
+    else:
+      R = self.recurrent_kernel
+
     x = self._layer_norm(inputs @ self.kernel, self.gamma[0]) + self.bias
-    h_proj = self._layer_norm(state @ self.recurrent_kernel, self.gamma[1]) + self.recurrent_bias
+    h_proj = self._layer_norm(state @ R, self.gamma[1]) + self.recurrent_bias
     h_z, h_r, h_g = tf.split(h_proj, 3, axis=-1)
     x_z, x_r, x_g = tf.split(x, 3, axis=-1)
     z = tf.nn.sigmoid(h_z + x_z)
