@@ -18,7 +18,7 @@ VERSION = '0.4.0'
 DESCRIPTION = 'Haste: a fast, simple, and open RNN library.'
 AUTHOR = 'LMNT, Inc.'
 AUTHOR_EMAIL = 'haste@lmnt.com'
-URL = 'https://www.lmnt.com'
+URL = 'https://haste.lmnt.com'
 LICENSE = 'Apache 2.0'
 CLASSIFIERS = [
   'Development Status :: 4 - Beta',
