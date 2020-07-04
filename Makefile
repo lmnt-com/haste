@@ -22,7 +22,7 @@ LOCAL_LDFLAGS := -L$(CUDA_HOME)/lib64 -L. -lcudart -lcublas
 GPU_ARCH_FLAGS := -gencode arch=compute_37,code=compute_37 -gencode arch=compute_60,code=compute_60 -gencode arch=compute_70,code=compute_70
 
 # Small enough project that we can just recompile all the time.
-.PHONY: all haste haste_tf haste_pytorch examples benchmarks clean
+.PHONY: all haste haste_tf haste_pytorch libhaste_tf examples benchmarks clean
 
 all: haste haste_tf haste_pytorch examples benchmarks
 
@@ -43,7 +43,7 @@ haste:
 	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/layer_norm_indrnn_backward_gpu.cu.cc -o lib/layer_norm_indrnn_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
 	$(AR) $(AR_FLAGS) lib/*.o
 
-haste_tf: haste
+libhaste_tf: haste
 	$(eval TF_CFLAGS := $(shell $(PYTHON) -c 'import tensorflow as tf; print(" ".join(tf.sysconfig.get_compile_flags()))'))
 	$(eval TF_LDFLAGS := $(shell $(PYTHON) -c 'import tensorflow as tf; print(" ".join(tf.sysconfig.get_link_flags()))'))
 	$(CXX) -std=c++11 -c frameworks/tf/lstm.cc -o frameworks/tf/lstm.o $(LOCAL_CFLAGS) $(TF_CFLAGS) -fPIC
@@ -55,21 +55,39 @@ haste_tf: haste
 	$(CXX) -std=c++11 -c frameworks/tf/indrnn.cc -o frameworks/tf/indrnn.o $(LOCAL_CFLAGS) $(TF_CFLAGS) -fPIC
 	$(CXX) -std=c++11 -c frameworks/tf/support.cc -o frameworks/tf/support.o $(LOCAL_CFLAGS) $(TF_CFLAGS) -fPIC
 	$(CXX) -shared frameworks/tf/*.o libhaste.a -o frameworks/tf/libhaste_tf.so $(LOCAL_LDFLAGS) $(TF_LDFLAGS) -fPIC
+
+# Dependencies handled by setup.py
+haste_tf:
 	@$(eval TMP := $(shell mktemp -d))
-	@cp -r frameworks/tf $(TMP)
-	@cp setup.py $(TMP)
-	@(cd $(TMP); $(PYTHON) setup.py haste_tf -q bdist_wheel)
+	@cp -r . $(TMP)
+	@cat build/common.py build/setup.tf.py > $(TMP)/setup.py
+	@(cd $(TMP); $(PYTHON) setup.py -q bdist_wheel)
 	@cp $(TMP)/dist/*.whl .
 	@rm -rf $(TMP)
 
-haste_pytorch: haste
+# Dependencies handled by setup.py
+haste_pytorch:
 	@$(eval TMP := $(shell mktemp -d))
-	@cp -r frameworks/pytorch $(TMP)
-	@cp -r lib $(TMP)
-	@cp setup.py $(TMP)
-	@cp $(LIBHASTE) $(TMP)
-	@(cd $(TMP); $(PYTHON) setup.py haste_pytorch -q bdist_wheel)
+	@cp -r . $(TMP)
+	@cat build/common.py build/setup.pytorch.py > $(TMP)/setup.py
+	@(cd $(TMP); $(PYTHON) setup.py -q bdist_wheel)
 	@cp $(TMP)/dist/*.whl .
+	@rm -rf $(TMP)
+
+dist:
+	@$(eval TMP := $(shell mktemp -d))
+	@cp -r . $(TMP)
+	@cp build/MANIFEST.in $(TMP)
+	@cat build/common.py build/setup.tf.py > $(TMP)/setup.py
+	@(cd $(TMP); $(PYTHON) setup.py -q sdist)
+	@cp $(TMP)/dist/*.tar.gz .
+	@rm -rf $(TMP)
+	@$(eval TMP := $(shell mktemp -d))
+	@cp -r . $(TMP)
+	@cp build/MANIFEST.in $(TMP)
+	@cat build/common.py build/setup.pytorch.py > $(TMP)/setup.py
+	@(cd $(TMP); $(PYTHON) setup.py -q sdist)
+	@cp $(TMP)/dist/*.tar.gz .
 	@rm -rf $(TMP)
 
 examples: haste
@@ -81,5 +99,5 @@ benchmarks: haste
 	$(CXX) -std=c++11 benchmarks/benchmark_gru.cc $(LIBHASTE) $(LOCAL_CFLAGS) $(LOCAL_LDFLAGS) -o benchmark_gru -Wno-ignored-attributes -lcudnn
 
 clean:
-	rm -fr benchmark_lstm benchmark_gru haste_lstm haste_gru build haste_*.whl
+	rm -fr benchmark_lstm benchmark_gru haste_lstm haste_gru haste_*.whl haste_*.tar.gz
 	find . \( -iname '*.o' -o -iname '*.so' -o -iname '*.a' -o -iname '*.lib' \) -delete
