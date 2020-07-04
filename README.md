@@ -3,6 +3,7 @@
 </div>
 
 --------------------------------------------------------------------------------
+[![GitHub release (latest SemVer including pre-releases)](https://img.shields.io/github/v/release/lmnt-com/haste?include_prereleases)](https://github.com/lmnt-com/haste/releases) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1hzYhcyvbXYMAUwa3515BszSkhx1UUFSt) [![GitHub](https://img.shields.io/github/license/lmnt-com/haste)](LICENSE)
 
 Haste is a CUDA implementation of fused RNN layers with built-in [DropConnect](http://proceedings.mlr.press/v28/wan13.html) and [Zoneout](https://arxiv.org/abs/1606.01305) regularization. These layers are exposed through C++ and Python APIs for easy integration into your own projects or machine learning frameworks.
 
@@ -21,6 +22,45 @@ What's included in this project?
 - benchmarking programs to evaluate the performance of RNN implementations
 
 For questions or feedback about Haste, please open an issue on GitHub or send us an email at [haste@lmnt.com](mailto:haste@lmnt.com).
+
+## Install
+Here's what you'll need to get started:
+- a [CUDA Compute Capability](https://developer.nvidia.com/cuda-gpus) 3.7+ GPU (required)
+- [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) 10.0+ (required)
+- [TensorFlow GPU](https://www.tensorflow.org/install/gpu) 1.14+ or 2.0+ for TensorFlow integration (optional)
+- [PyTorch](https://pytorch.org) 1.3+ for PyTorch integration (optional)
+- [Eigen 3](http://eigen.tuxfamily.org/) to build the C++ examples (optional)
+- [cuDNN Developer Library](https://developer.nvidia.com/rdp/cudnn-archive) to build benchmarking programs (optional)
+
+Once you have the prerequisites, you can install with pip or by building the source code.
+
+### Using pip
+```
+pip install haste_pytorch
+pip install haste_tf
+```
+
+### Building from source
+```
+make               # Build everything
+make haste         # ;) Build C++ API
+make haste_tf      # Build TensorFlow API
+make haste_pytorch # Build PyTorch API
+make examples
+make benchmarks
+```
+
+If you built the TensorFlow or PyTorch API, install it with `pip`:
+```
+pip install haste_tf-*.whl
+pip install haste_pytorch-*.whl
+```
+
+If the CUDA Toolkit that you're building against is not in `/usr/local/cuda`, you must specify the
+`$CUDA_HOME` environment variable before running make:
+```
+CUDA_HOME=/usr/local/cuda-10.2 make
+```
 
 ## Performance
 Our LSTM and GRU benchmarks indicate that Haste has the fastest publicly available implementation for nearly all problem sizes. The following charts show our LSTM results, but the GRU results are qualitatively similar.
@@ -51,39 +91,6 @@ Here is our complete LSTM benchmark result grid:
 [`N=128 C=128`](https://lmnt.com/assets/haste/benchmark/report_n=128_c=128.png)
 [`N=128 C=256`](https://lmnt.com/assets/haste/benchmark/report_n=128_c=256.png)
 [`N=128 C=512`](https://lmnt.com/assets/haste/benchmark/report_n=128_c=512.png)
-
-## Install
-Here's what you'll need to get started:
-- a [CUDA Compute Capability](https://developer.nvidia.com/cuda-gpus) 6.0+ GPU (required)
-- [TensorFlow GPU](https://www.tensorflow.org/install/gpu) 1.14+ or 2.0+ for TensorFlow integration (optional)
-- [PyTorch](https://pytorch.org) 1.2+ for PyTorch integration (optional)
-- [Eigen 3](http://eigen.tuxfamily.org/) to build the C++ examples (optional)
-- [cuDNN Developer Library](https://developer.nvidia.com/rdp/cudnn-archive) to build benchmarking programs (optional)
-
-Once you have the prerequisites, run one or more of the following to build the code:
-```
-make               # Build everything
-make haste         # ;) Build C++ API
-make haste_tf      # Build TensorFlow API
-make haste_pytorch # Build PyTorch API
-make examples
-make benchmarks
-```
-
-If you built the TensorFlow or PyTorch API, install it with `pip`:
-```
-pip install haste_tf-*.whl
-pip install haste_pytorch-*.whl
-```
-
-If the CUDA Toolkit that you're building against is not in `/usr/local/cuda`, you must specify the
-`$CUDA_HOME` environment variable before running make:
-```
-CUDA_HOME=/usr/local/cuda-10.2 make
-```
-
-## Google Colab
-All of the Haste APIs and executables work in Google Colab. For a quick start, take a look at the [Getting Started notebook](https://colab.research.google.com/drive/1hzYhcyvbXYMAUwa3515BszSkhx1UUFSt).
 
 ## Documentation
 ### TensorFlow API
