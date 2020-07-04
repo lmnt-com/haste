@@ -14,7 +14,7 @@
 # ==============================================================================
 
 
-VERSION = '0.4.0'
+VERSION = '0.5.0-rc0'
 DESCRIPTION = 'Haste: a fast, simple, and open RNN library.'
 AUTHOR = 'LMNT, Inc.'
 AUTHOR_EMAIL = 'haste@lmnt.com'
