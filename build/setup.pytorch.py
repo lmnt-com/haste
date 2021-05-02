@@ -40,13 +40,13 @@ else:
 with open(f'frameworks/pytorch/_version.py', 'wt') as f:
   f.write(f'__version__ = "{VERSION}"')
 
-extension = cpp_extension.CppExtension(
+extension = cpp_extension.CUDAExtension(
     'haste_pytorch_lib',
     sources = glob('frameworks/pytorch/*.cc'),
     extra_compile_args = extra_args,
     include_dirs = [os.path.join(base_path, 'lib'), os.path.join(CUDA_HOME, 'include')],
-    libraries = ['haste', 'cublas', 'cudart'],
-    library_dirs = ['.', os.path.join(CUDA_HOME, 'lib64'), os.path.join(CUDA_HOME, 'lib', 'x64')])
+    libraries = ['haste'],
+    library_dirs = ['.'])
 
 setup(name = 'haste_pytorch',
     version = VERSION,

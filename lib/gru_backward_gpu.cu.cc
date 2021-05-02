@@ -183,6 +183,8 @@ void BackwardPass<T>::Iterate(
     T* dp,            // [N,H*3]
     T* dq,            // [N,H*3]
     const T* zoneout_mask) {  // [N,H]
+  const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
+
   const T alpha = static_cast<T>(1.0);
   const T beta_sum = static_cast<T>(1.0);
   const T beta_assign = static_cast<T>(0.0);
@@ -337,6 +339,7 @@ void BackwardPass<T>::Run(
     T* dq,
     const T* zoneout_mask) {
   const blas<void>::enable_tensor_cores scoped0(data_->blas_handle);
+  const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
 
   const T alpha = static_cast<T>(1.0);
   const T beta_sum = static_cast<T>(1.0);

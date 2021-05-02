@@ -127,6 +127,8 @@ void ForwardPass<T>::Run(
   static const T alpha = static_cast<T>(1.0);
   static const T beta = static_cast<T>(0.0);
 
+  const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
+
   const bool training = data_->training;
   const int batch_size = data_->batch_size;
   const int input_size = data_->input_size;
