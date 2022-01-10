@@ -268,7 +268,7 @@ void BackwardPass<T>::Run(
         dp + i * NH * 3,
         dq + i * NH * 3,
         layer_norm2,
-        zoneout_mask);
+        zoneout_mask ? zoneout_mask + i * NH : nullptr);
   }
 
   // Wait for pointwise operations to complete since there's a
