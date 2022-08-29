@@ -32,3 +32,4 @@
 #include "haste/layer_norm_indrnn.h"
 #include "haste/layer_norm_lstm.h"
 #include "haste/lstm.h"
+#include "haste/ligru.h"

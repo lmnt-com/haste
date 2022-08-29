@@ -16,12 +16,12 @@
 """Gated Recurrent Unit"""
 
 
-import haste_pytorch_lib as LIB
 import torch
+import haste_pytorch_lib as LIB
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .base_rnn import BaseRNN
+from base_rnn import BaseRNN
 
 
 __all__ = [
@@ -269,3 +269,13 @@ class GRU(BaseRNN):
           self.bias.contiguous(),
           self.recurrent_bias.contiguous(),
           zoneout_mask.contiguous())
+
+if __name__ == "__main__":
+  x = torch.randn(1, 2, 1, requires_grad=True, dtype=torch.double, device="cuda")
+  gru = GRU(1, 5, True).to("cuda").to(torch.double)
+
+
+  print(torch.autograd.gradcheck(gru, x))
+
+  
+  
