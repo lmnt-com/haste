@@ -23,8 +23,8 @@ if __name__ == "__main__":
         True, 
         x.contiguous(),
         h_init,
-        w,
-        u,
+        w.T.contiguous(),
+        u.T.contiguous(),
         drop_mask
 
     )
@@ -32,5 +32,8 @@ if __name__ == "__main__":
     if BATCH_FIRST:
         out = out.permute(1, 0, 2)
 
+    print(x_ @ w.T)
+    print(out)
+    
+    # print(torch.allclose(x_, out))
 
-    print(torch.allclose(x_, out))

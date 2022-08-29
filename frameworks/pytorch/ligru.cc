@@ -53,7 +53,7 @@ std::vector<Tensor> ligru_forward(
 
   Tensor output = torch::empty({ seq_length + 1, batch_size, hidden_size }, options);
   Tensor cache = torch::empty({ seq_length, batch_size, hidden_size * 3 }, options);
-  Tensor tmp_wx = torch::empty({ seq_length, batch_size, hidden_size * 2 }, options);
+  Tensor tmp_wx = torch::zeros({ seq_length, batch_size, hidden_size * 2 }, options);
   Tensor tmp_uh = torch::empty({ batch_size, hidden_size * 2 }, options);
 
   output[0] = h_init;
@@ -81,7 +81,7 @@ std::vector<Tensor> ligru_forward(
 
   }));
 
-  return { x };
+  return { tmp_wx };
 }
 
 }  // anonymous namespace

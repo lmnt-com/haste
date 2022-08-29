@@ -99,9 +99,47 @@ void ForwardPass<T>::Run(
       &beta,
       tmp_wx, hidden_size * 2);
   cudaEventRecord(event, stream2);
-
 }
 
+template<typename T>
+void ForwardPass<T>::IterateInternal(
+    const T* u, 
+    const T* h, 
+    T* h_out,  
+    T* v,      
+    T* tmp_wx,  
+    T* tmp_uh,   
+    const T* drop_mask) {
+    static const T alpha = static_cast<T>(1.0);
+    static const T beta = static_cast<T>(0.0);
+
+    const bool training = data_->training;
+    const int batch_size = data_->batch_size;
+    const int hidden_size = data_->hidden_size;
+    const cublasHandle_t blas_handle = data_->blas_handle;
+    const cudaStream_t stream1 = data_->stream[0];
+    const cudaEvent_t event = data_->event;
+
+    blas<T>::gemm(blas_handle,
+        CUBLAS_OP_N, CUBLAS_OP_N,
+        hidden_size * 2, batch_size, hidden_size,
+        &alpha,
+        u, hidden_size * 2,
+        h, hidden_size,
+        &beta,
+        tmp_uh, hidden_size * 2);
+
+    // Compute launch configuration for pointwise operations kernel.
+    const dim3 blockDim(32, 16);
+    const dim3 gridDim(
+        (hidden_size + blockDim.x - 1) / blockDim.x,
+        (batch_size + blockDim.y - 1) / blockDim.y);
+
+    cudaStreamWaitEvent(stream1, event, 0);
+
+    if (training) {
+    }
+}
 
 
 
