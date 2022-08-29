@@ -81,7 +81,7 @@ std::vector<Tensor> ligru_forward(
 
   }));
 
-  return { tmp_wx };
+  return { tmp_wx, tmp_uh, output, cache };
 }
 
 }  // anonymous namespace

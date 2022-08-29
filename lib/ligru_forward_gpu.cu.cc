@@ -8,6 +8,67 @@
 #include "haste.h"
 #include "inline_ops.h"
 
+namespace {
+
+template<typename T, bool Training>
+__global__
+void PointwiseOperations(const int batch_dim,
+                         const int hidden_dim,
+                         const T* wx,
+                         const T* uh,
+                         const T* h,
+                         T* h_out,
+                         T* v,
+                         const T* drop_mask) {  
+  const int row = blockDim.x * blockIdx.x + threadIdx.x;
+  const int col = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (row >= hidden_dim || col >= batch_dim)
+    return;
+
+  const int weight_idx = col * (hidden_dim * 2) + row;
+
+  // Index into the `h` and `h_out` vectors (they have a stride of `hidden_dim`).
+  const int output_idx = col * hidden_dim + row;
+
+  // Indicies into the Wx and Rh matrices (for each of the u, r, and e components).
+  const int a_idx = weight_idx + 0 * hidden_dim;
+  const int z_idx = weight_idx + 1 * hidden_dim;
+
+
+  const T z = sigmoid(wx[z_idx] + uh[z_idx]);
+  const T a = wx[a_idx] + uh[a_idx];
+  const T hcand = relu(a) * drop_mask[output_idx];
+
+  // Store internal activations if we're eventually going to backprop.
+  if (Training) {
+    const int base_v_idx = col * (hidden_dim * 3) + row;
+    v[base_v_idx + 0 * hidden_dim] = z;
+    v[base_v_idx + 1 * hidden_dim] = a;
+    v[base_v_idx + 2 * hidden_dim] = hcand;
+  }
+
+  T cur_h_value = z * h[output_idx] + (static_cast<T>(1.0) - z) * hcand;
+
+  h_out[output_idx] = cur_h_value;
+}
+
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 700)
+template<typename T, bool Training>
+__global__
+void PointwiseOperations(const int batch_dim,
+                         const int hidden_dim,
+                         const half* wx,
+                         const half* uh,
+                         const half* h,
+                         half* h_out,
+                         half* v,
+                         const half* drop_mask) {
+  device_assert_fail("FP16 is not supported on compute capability < 7.0.");
+}
+#endif
+
+}  // anonymous namespace
 
 namespace haste {
 namespace v0 {
@@ -62,43 +123,53 @@ ForwardPass<T>::~ForwardPass() {
 }
 
 template<typename T>
-void ForwardPass<T>::Run(
-    const int time_step,
+void ForwardPass<T>::Iterate(
     const T* w,
     const T* u,
     const T* x,
-    T* h,
+    const T* h,
+    T* h_out,
     T* v,
     T* tmp_wx,
     T* tmp_uh,
     const T* drop_mask) {
-    
     static const T alpha = static_cast<T>(1.0);
     static const T beta = static_cast<T>(0.0);
-    
-    const blas<void>::enable_tensor_cores scoped0(data_->blas_handle);
-    const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
 
-    const int batch_size = data_->batch_size;
-    const int input_size = data_->input_size;
-    const int hidden_size = data_->hidden_size;
-    const cublasHandle_t blas_handle = data_->blas_handle;
-    const cudaStream_t stream2 = data_->stream[1];
-    const cudaEvent_t event = data_->event;
+  const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
 
-    cudaStream_t save_stream;
-    cublasGetStream(blas_handle, &save_stream);
+  const int batch_size = data_->batch_size;
+  const int input_size = data_->input_size;
+  const int hidden_size = data_->hidden_size;
+  const cublasHandle_t blas_handle = data_->blas_handle;
+  const cudaStream_t stream2 = data_->stream[1];
+  const cudaEvent_t event = data_->event;
 
-    cublasSetStream(blas_handle, stream2);
-      blas<T>::gemm(blas_handle,
+  cudaStream_t save_stream;
+  cublasGetStream(blas_handle, &save_stream);
+
+
+cublasSetStream(blas_handle, stream2);
+  blas<T>::gemm(blas_handle,
       CUBLAS_OP_N, CUBLAS_OP_N,
-      hidden_size * 2, time_step * batch_size, input_size,
+      hidden_size * 3, batch_size, input_size,
       &alpha,
-      w, hidden_size * 2,
+      w, hidden_size * 3,
       x, input_size,
       &beta,
-      tmp_wx, hidden_size * 2);
+      tmp_wx, hidden_size * 3);
   cudaEventRecord(event, stream2);
+
+    IterateInternal(
+    u,
+    h,
+    h_out,
+    v,
+    tmp_wx,
+    tmp_uh,
+    drop_mask);
+
+    cublasSetStream(blas_handle, save_stream);
 }
 
 template<typename T>
@@ -138,10 +209,85 @@ void ForwardPass<T>::IterateInternal(
     cudaStreamWaitEvent(stream1, event, 0);
 
     if (training) {
+        PointwiseOperations<T, true><<<gridDim, blockDim, 0, stream1>>>(
+          batch_size,
+          hidden_size,
+          tmp_wx,
+          tmp_uh,
+          h,
+          h_out,
+          v,
+          drop_mask);
+    }
+    else {
+        PointwiseOperations<T, false><<<gridDim, blockDim, 0, stream1>>>(
+          batch_size,
+          hidden_size,
+          tmp_wx,
+          tmp_uh,
+          h,
+          h_out,
+          v,
+          drop_mask); 
     }
 }
 
 
+template<typename T>
+void ForwardPass<T>::Run(
+    const int seq_length,
+    const T* w,
+    const T* u,
+    const T* x,
+    T* h,
+    T* v,
+    T* tmp_wx,
+    T* tmp_uh,
+    const T* drop_mask) {
+    
+    static const T alpha = static_cast<T>(1.0);
+    static const T beta = static_cast<T>(0.0);
+    
+    const blas<void>::enable_tensor_cores scoped0(data_->blas_handle);
+    const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
+
+    const int batch_size = data_->batch_size;
+    const int input_size = data_->input_size;
+    const int hidden_size = data_->hidden_size;
+    const cublasHandle_t blas_handle = data_->blas_handle;
+    const cudaStream_t stream2 = data_->stream[1];
+    const cudaEvent_t event = data_->event;
+
+    cudaStream_t save_stream;
+    cublasGetStream(blas_handle, &save_stream);
+
+    cublasSetStream(blas_handle, stream2);
+      blas<T>::gemm(blas_handle,
+      CUBLAS_OP_N, CUBLAS_OP_N,
+      hidden_size * 2, seq_length * batch_size, input_size,
+      &alpha,
+      w, hidden_size * 2,
+      x, input_size,
+      &beta,
+      tmp_wx, hidden_size * 2);
+  cudaEventRecord(event, stream2);
+
+  const int NH = batch_size * hidden_size;
+
+  for (int i = 0; i < seq_length; ++i) {
+    IterateInternal
+    (
+        u, 
+        h + i * NH,
+        h + (i + 1) * NH,  
+        v + i * NH * 3,      
+        tmp_wx + i * NH * 2,  
+        tmp_uh,   
+        drop_mask);
+
+  }
+  // for loop
+}
 
 template struct ForwardPass<half>;
 template struct ForwardPass<float>;

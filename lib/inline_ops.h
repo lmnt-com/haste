@@ -25,6 +25,13 @@ T sigmoid(const T x) {
 
 template<typename T>
 __device__ __forceinline__
+T relu(const T x) {
+  return (x > static_cast<T>(0.) ? x : static_cast<T>(0.));
+}
+
+
+template<typename T>
+__device__ __forceinline__
 T tanh(const T x) {
   return std::tanh(x);
 }
