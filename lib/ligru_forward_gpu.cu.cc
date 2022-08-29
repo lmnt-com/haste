@@ -86,7 +86,20 @@ void ForwardPass<T>::Run(
     const cudaStream_t stream2 = data_->stream[1];
     const cudaEvent_t event = data_->event;
 
-    
+    cudaStream_t save_stream;
+    cublasGetStream(blas_handle, &save_stream);
+
+    cublasSetStream(blas_handle, stream2);
+      blas<T>::gemm(blas_handle,
+      CUBLAS_OP_N, CUBLAS_OP_N,
+      hidden_size * 2, time_step * batch_size, input_size,
+      &alpha,
+      w, hidden_size * 2,
+      x, input_size,
+      &beta,
+      tmp_wx, hidden_size * 2);
+  cudaEventRecord(event, stream2);
+
 }
 
 
