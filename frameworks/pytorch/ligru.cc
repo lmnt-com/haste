@@ -51,9 +51,12 @@ std::vector<Tensor> ligru_forward(
   const auto options = x.options();
   const at::cuda::CUDAGuard guard(options.device_index());
 
+  Tensor output = torch::empty({ seq_length + 1, batch_size, hidden_size }, options);
   Tensor cache = torch::empty({ seq_length, batch_size, hidden_size * 3 }, options);
   Tensor tmp_wx = torch::empty({ seq_length, batch_size, hidden_size * 2 }, options);
   Tensor tmp_uh = torch::empty({ batch_size, hidden_size * 2 }, options);
+
+  output[0] = h_init;
 
   AT_DISPATCH_FLOATING_TYPES_AND_HALF(x.scalar_type(), "ligru_forward", ([&] {
     ForwardPass<typename native_type<scalar_t>::T> forward(
@@ -64,6 +67,17 @@ std::vector<Tensor> ligru_forward(
         at::cuda::getCurrentCUDABlasHandle(),
         at::cuda::getCurrentCUDAStream());
 
+
+    forward.Run(
+        seq_length,
+        ptr<scalar_t>(w),
+        ptr<scalar_t>(u),
+        ptr<scalar_t>(x),
+        ptr<scalar_t>(output),
+        ptr<scalar_t>(cache),
+        ptr<scalar_t>(tmp_wx),
+        ptr<scalar_t>(tmp_uh),
+        ptr<scalar_t>(drop_mask));
 
   }));
 

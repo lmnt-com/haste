@@ -43,6 +43,18 @@ class ForwardPass {
     ~ForwardPass();
 
 
+    void Run(
+        const int time_step,
+        const T* w,
+        const T* u,
+        const T* x,
+        T* h,
+        T* v,
+        T* tmp_wx,
+        T* tmp_uh,
+        const T* drop_mask);
+
+
   private:
 
     struct private_data;

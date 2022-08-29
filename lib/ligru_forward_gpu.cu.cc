@@ -61,6 +61,37 @@ ForwardPass<T>::~ForwardPass() {
   delete data_;
 }
 
+template<typename T>
+void ForwardPass<T>::Run(
+    const int time_step,
+    const T* w,
+    const T* u,
+    const T* x,
+    T* h,
+    T* v,
+    T* tmp_wx,
+    T* tmp_uh,
+    const T* drop_mask) {
+    
+    static const T alpha = static_cast<T>(1.0);
+    static const T beta = static_cast<T>(0.0);
+    
+    const blas<void>::enable_tensor_cores scoped0(data_->blas_handle);
+    const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
+
+    const int batch_size = data_->batch_size;
+    const int input_size = data_->input_size;
+    const int hidden_size = data_->hidden_size;
+    const cublasHandle_t blas_handle = data_->blas_handle;
+    const cudaStream_t stream2 = data_->stream[1];
+    const cudaEvent_t event = data_->event;
+
+    
+}
+
+
+
+
 template struct ForwardPass<half>;
 template struct ForwardPass<float>;
 template struct ForwardPass<double>;
