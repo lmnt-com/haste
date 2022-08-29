@@ -42,6 +42,16 @@ class ForwardPass {
     // Blocks until all iterations have completed executing on the GPU.
     ~ForwardPass();
 
+    void Iterate(
+        const T* w,
+        const T* u,
+        const T* x,
+        const T* h,
+        T* h_out,
+        T* v,
+        T* tmp_wx,
+        T* tmp_uh,
+        const T* drop_mask);
 
     void Run(
         const int time_step,
@@ -56,6 +66,14 @@ class ForwardPass {
 
 
   private:
+    void IterateInternal(
+        const T* u,
+        const T* h,
+        T* h_out,
+        T* v,
+        T* tmp_wx,
+        T* tmp_uh,
+        const T* drop_mask);
 
     struct private_data;
     private_data* data_;
