@@ -10,6 +10,7 @@
 
 namespace {
 
+
 template<typename T, bool Training>
 __global__
 void PointwiseOperations(const int batch_dim,
@@ -36,15 +37,16 @@ void PointwiseOperations(const int batch_dim,
   const int z_idx = weight_idx + 1 * hidden_dim;
 
 
-  const T z = sigmoid(wx[z_idx] + uh[z_idx]);
-  const T a = wx[a_idx] + uh[a_idx];
+  const T z = sigmoid(wx[z_idx] + uh[z_idx]); //wx[z_idx] + uh[z_idx]; // sigmoid(wx[z_idx] + uh[z_idx]);
+  const T a = wx[a_idx] + uh[a_idx]; //+ uh[a_idx];
+  
   const T hcand = relu(a) * drop_mask[output_idx];
 
   // Store internal activations if we're eventually going to backprop.
   if (Training) {
     const int base_v_idx = col * (hidden_dim * 3) + row;
-    v[base_v_idx + 0 * hidden_dim] = z;
-    v[base_v_idx + 1 * hidden_dim] = a;
+    v[base_v_idx + 1 * hidden_dim] = z;
+    v[base_v_idx + 0 * hidden_dim] = a;
     v[base_v_idx + 2 * hidden_dim] = hcand;
   }
 
@@ -122,55 +124,6 @@ ForwardPass<T>::~ForwardPass() {
   delete data_;
 }
 
-template<typename T>
-void ForwardPass<T>::Iterate(
-    const T* w,
-    const T* u,
-    const T* x,
-    const T* h,
-    T* h_out,
-    T* v,
-    T* tmp_wx,
-    T* tmp_uh,
-    const T* drop_mask) {
-    static const T alpha = static_cast<T>(1.0);
-    static const T beta = static_cast<T>(0.0);
-
-  const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
-
-  const int batch_size = data_->batch_size;
-  const int input_size = data_->input_size;
-  const int hidden_size = data_->hidden_size;
-  const cublasHandle_t blas_handle = data_->blas_handle;
-  const cudaStream_t stream2 = data_->stream[1];
-  const cudaEvent_t event = data_->event;
-
-  cudaStream_t save_stream;
-  cublasGetStream(blas_handle, &save_stream);
-
-
-cublasSetStream(blas_handle, stream2);
-  blas<T>::gemm(blas_handle,
-      CUBLAS_OP_N, CUBLAS_OP_N,
-      hidden_size * 3, batch_size, input_size,
-      &alpha,
-      w, hidden_size * 3,
-      x, input_size,
-      &beta,
-      tmp_wx, hidden_size * 3);
-  cudaEventRecord(event, stream2);
-
-    IterateInternal(
-    u,
-    h,
-    h_out,
-    v,
-    tmp_wx,
-    tmp_uh,
-    drop_mask);
-
-    cublasSetStream(blas_handle, save_stream);
-}
 
 template<typename T>
 void ForwardPass<T>::IterateInternal(
@@ -191,6 +144,8 @@ void ForwardPass<T>::IterateInternal(
     const cudaStream_t stream1 = data_->stream[0];
     const cudaEvent_t event = data_->event;
 
+
+    cublasSetStream(blas_handle, stream1);
     blas<T>::gemm(blas_handle,
         CUBLAS_OP_N, CUBLAS_OP_N,
         hidden_size * 2, batch_size, hidden_size,
@@ -236,41 +191,15 @@ void ForwardPass<T>::IterateInternal(
 template<typename T>
 void ForwardPass<T>::Run(
     const int seq_length,
-    const T* w,
+    T* wx,
     const T* u,
-    const T* x,
     T* h,
     T* v,
-    T* tmp_wx,
     T* tmp_uh,
     const T* drop_mask) {
     
-    static const T alpha = static_cast<T>(1.0);
-    static const T beta = static_cast<T>(0.0);
-    
-    const blas<void>::enable_tensor_cores scoped0(data_->blas_handle);
-    const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
-
     const int batch_size = data_->batch_size;
-    const int input_size = data_->input_size;
     const int hidden_size = data_->hidden_size;
-    const cublasHandle_t blas_handle = data_->blas_handle;
-    const cudaStream_t stream2 = data_->stream[1];
-    const cudaEvent_t event = data_->event;
-
-    cudaStream_t save_stream;
-    cublasGetStream(blas_handle, &save_stream);
-
-    cublasSetStream(blas_handle, stream2);
-      blas<T>::gemm(blas_handle,
-      CUBLAS_OP_N, CUBLAS_OP_N,
-      hidden_size * 2, seq_length * batch_size, input_size,
-      &alpha,
-      w, hidden_size * 2,
-      x, input_size,
-      &beta,
-      tmp_wx, hidden_size * 2);
-  cudaEventRecord(event, stream2);
 
   const int NH = batch_size * hidden_size;
 
@@ -281,12 +210,11 @@ void ForwardPass<T>::Run(
         h + i * NH,
         h + (i + 1) * NH,  
         v + i * NH * 3,      
-        tmp_wx + i * NH * 2,  
+        wx + i * NH * 2,  
         tmp_uh,   
         drop_mask);
 
   }
-  // for loop
 }
 
 template struct ForwardPass<half>;

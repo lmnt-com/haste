@@ -73,6 +73,12 @@ half sigmoid(const half x) {
 
 template<>
 __device__ __forceinline__
+half relu(const half x) {
+  return (x > static_cast<half>(0.) ? x : static_cast<half>(0.));
+}
+
+template<>
+__device__ __forceinline__
 half tanh(const half x) {
   return std::tanh(float(x));
 }
