@@ -7,6 +7,9 @@
 #include "inline_ops.h"
 
 
+// todo: backward of ligru 
+// todo: try a side version
+
 namespace haste {
 namespace v0 {
 namespace ligru {
@@ -65,32 +68,32 @@ void BackwardPass<T>::Run(
     const T* u_t,
     const T* h,
     const T* v,
-    const T* dh_new,
+    const T* grad_out,
     T* dwx,
     T* du,
     T* dh,
     const T* drop_mask) {
-      
-  // const blas<void>::enable_tensor_cores scoped0(data_->blas_handle);
-  // const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
+
+  const blas<void>::enable_tensor_cores scoped0(data_->blas_handle);
+  const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
 
   // const T alpha = static_cast<T>(1.0);
   // const T beta_sum = static_cast<T>(1.0);
   // const T beta_assign = static_cast<T>(0.0);
 
-  // const int batch_size = data_->batch_size;
-  // const int input_size = data_->input_size;
-  // const int hidden_size = data_->hidden_size;
-  // const cublasHandle_t blas_handle = data_->blas_handle;
-  // const cudaStream_t stream1 = data_->stream[0];
-  // const cudaStream_t stream2 = data_->stream[1];
-  // const cudaEvent_t event = data_->event;
+  const int batch_size = data_->batch_size;
+  const int input_size = data_->input_size;
+  const int hidden_size = data_->hidden_size;
+  const cublasHandle_t blas_handle = data_->blas_handle;
+  const cudaStream_t stream1 = data_->stream[0];
+  const cudaStream_t stream2 = data_->stream[1];
+  const cudaEvent_t event = data_->event;
 
-  // cudaStream_t save_stream;
-  // cublasGetStream(blas_handle, &save_stream);
+  cudaStream_t save_stream;
+  cublasGetStream(blas_handle, &save_stream);
 
-  // const int NH = batch_size * hidden_size;
-  // for (int i = steps - 1; i >= 0; --i) {
+  const int NH = batch_size * hidden_size;
+  for (int i = steps - 1; i >= 0; --i) {
   //   IterateInternal(
   //       R_t,
   //       h + i * NH,
@@ -102,43 +105,8 @@ void BackwardPass<T>::Run(
   //       dp + i * NH * 3,
   //       dq + i * NH * 3,
   //       zoneout_mask ? zoneout_mask + i * NH : nullptr );
-  // }
+  }
 
-  // Wait for pointwise operations to complete since there's a
-  // data dependency between its output (`dp`, `dq`) and the following matmuls.
-  // cudaStreamWaitEvent(stream2, event, 0);
-
-  // cublasSetStream(blas_handle, stream2);
-  // blas<T>::gemm(blas_handle,
-  //     CUBLAS_OP_N, CUBLAS_OP_N,
-  //     input_size, batch_size * steps, hidden_size * 3,
-  //     &alpha,
-  //     W_t, input_size,
-  //     dp, hidden_size * 3,
-  //     &beta_assign,
-  //     dx, input_size);
-
-  // cublasSetStream(blas_handle, stream2);
-  // blas<T>::gemm(blas_handle,
-  //     CUBLAS_OP_N, CUBLAS_OP_T,
-  //     hidden_size * 3, hidden_size, batch_size * steps,
-  //     &alpha,
-  //     dq, hidden_size * 3,
-  //     h, hidden_size,
-  //     &beta_sum,
-  //     dR, hidden_size * 3);
-
-  // cublasSetStream(blas_handle, stream1);
-  // blas<T>::gemm(blas_handle,
-  //     CUBLAS_OP_N, CUBLAS_OP_N,
-  //     hidden_size * 3, input_size, batch_size * steps,
-  //     &alpha,
-  //     dp, hidden_size * 3,
-  //     x_t, batch_size * steps,
-  //     &beta_sum,
-  //     dW, hidden_size * 3);
-
-  // cublasSetStream(blas_handle, save_stream);
 }
 
 

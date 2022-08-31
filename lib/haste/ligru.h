@@ -92,24 +92,22 @@ class BackwardPass {
         const T* u_t,
         const T* h,
         const T* v,
-        const T* dh_new,
+        const T* grad_out,
         T* dwx,
         T* du,
         T* dh,
         const T* drop_mask);
 
   private:
-    // void IterateInternal(
-    //     const T* R_t,
-    //     const T* h,
-    //     const T* v,
-    //     const T* dh_new,
-    //     T* dbx,
-    //     T* dbr,
-    //     T* dh,
-    //     T* dp,
-    //     T* dq,
-    //     const T* zoneout_mask);
+    void IterateInternal(
+        const T* u_t,
+        const T* h,
+        const T* v,
+        const T* dh_new,
+        T* dh,
+        T* dp,
+        T* dq,
+        const T* zoneout_mask);
 
     struct private_data;
     private_data* data_;
