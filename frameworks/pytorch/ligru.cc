@@ -89,7 +89,7 @@ std::vector<Tensor> ligru_backward(
     Tensor drop_mask,
     Tensor h,
     Tensor cache,
-    Tensor dh_new) {
+    Tensor grad_out) {
 
     const auto input_size = wx_t.size(0);
     const auto time_steps = wx_t.size(1);
@@ -100,7 +100,7 @@ std::vector<Tensor> ligru_backward(
     CHECK_INPUT(u_t);
     CHECK_INPUT(h);
     CHECK_INPUT(cache);
-    CHECK_INPUT(dh_new);
+    CHECK_INPUT(grad_out);
     CHECK_INPUT(drop_mask);
 
     const auto options = wx_t.options();
@@ -125,7 +125,7 @@ std::vector<Tensor> ligru_backward(
         ptr<scalar_t>(u_t),
         ptr<scalar_t>(h),
         ptr<scalar_t>(cache),
-        ptr<scalar_t>(dh_new),
+        ptr<scalar_t>(grad_out),
         ptr<scalar_t>(dwx),
         ptr<scalar_t>(du),
         ptr<scalar_t>(dh),
