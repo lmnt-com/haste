@@ -87,6 +87,16 @@ class GRUFunction(torch.autograd.Function):
     grads = LIB.gru_backward(*saved, grad_h.contiguous())
     return (None, None, *grads, None)
 
+# self.training,
+# self.zoneout,
+# input.contiguous(),
+# state.contiguous(),
+# self.kernel.contiguous(),
+# F.dropout(self.recurrent_kernel, self.dropout, self.training).contiguous(),
+# self.bias.contiguous(),
+# self.recurrent_bias.contiguous(),
+# zoneout_mask.contiguous())
+
 
 class GRU(BaseRNN):
   """

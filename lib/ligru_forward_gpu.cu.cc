@@ -37,10 +37,10 @@ void PointwiseOperations(const int batch_dim,
   const int z_idx = weight_idx + 1 * hidden_dim;
 
 
-  const T z = sigmoid(wx[z_idx] + uh[z_idx]); //wx[z_idx] + uh[z_idx]; // sigmoid(wx[z_idx] + uh[z_idx]);
-  const T a = wx[a_idx] + uh[a_idx]; //+ uh[a_idx];
+  const T z = sigmoid(wx[z_idx] + uh[z_idx]);// + uh[z_idx] //wx[z_idx] + uh[z_idx]; // sigmoid(wx[z_idx] + uh[z_idx]);
+  const T a = wx[a_idx] + uh[a_idx]; // + uh[a_idx] //+ uh[a_idx];
   
-  const T hcand = relu(a) * drop_mask[output_idx];
+  const T hcand = relu(a) * static_cast<T>(1.0); // drop_mask[output_idx];
 
   // Store internal activations if we're eventually going to backprop.
   if (Training) {

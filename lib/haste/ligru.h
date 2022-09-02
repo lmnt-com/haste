@@ -105,9 +105,8 @@ class BackwardPass {
         const T* v,
         const T* dh_new,
         T* dh,
-        T* dp,
-        T* dq,
-        const T* zoneout_mask);
+        T* dwx,
+        const T* drop_mask);
 
     struct private_data;
     private_data* data_;

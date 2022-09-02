@@ -48,6 +48,13 @@ T d_tanh(const T tanh_output) {
   return (static_cast<T>(1.0) - tanh_output * tanh_output);
 }
 
+template<typename T>
+__device__ __forceinline__
+T d_relu(const T x) {
+  return (x > static_cast<T>(0.) ? static_cast<T>(1.) : static_cast<T>(0.));
+}
+
+
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 600)
 
 __device__ __forceinline__
