@@ -102,7 +102,6 @@ std::vector<Tensor> ligru_backward(
     // const auto time_steps = wx_t.size(0);
     // const auto batch_size = wx_t.size(1);
     // const auto hidden_size = wx_t.size(2) / 2;
-
     CHECK_INPUT(wx_t);
     CHECK_INPUT(u_t);
     CHECK_INPUT(h);
@@ -114,7 +113,7 @@ std::vector<Tensor> ligru_backward(
     const at::cuda::CUDAGuard guard(options.device_index());
 
     Tensor dwx = torch::zeros({time_steps, batch_size, hidden_size * 2 }, options);
-    Tensor du = torch::zeros({ hidden_size * 2, hidden_size }, options);
+    Tensor du = torch::zeros({ hidden_size, hidden_size * 2 }, options);
     Tensor dh = torch::zeros({ batch_size, hidden_size }, options);
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(wx_t.scalar_type(), "ligru_backward", ([&] {

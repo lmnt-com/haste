@@ -174,7 +174,7 @@ void BackwardPass<T>::IterateInternal(
 template<typename T>
 void BackwardPass<T>::Run(
     const int time_step,
-    const T* wx,
+    const T* wx_t,
     const T* u_t,
     const T* h,
     const T* v,
@@ -216,17 +216,17 @@ void BackwardPass<T>::Run(
 
   cudaStreamWaitEvent(stream2, event, 0);
   
-  // cublasSetStream(blas_handle, stream2);
-  // blas<T>::gemm(blas_handle,
-  //     CUBLAS_OP_N, CUBLAS_OP_T,
-  //     hidden_size * 2, hidden_size, batch_size * time_step,
-  //     &alpha,
-  //     dwx, hidden_size * 2,
-  //     h, hidden_size,
-  //     &beta_sum,
-  //     du, hidden_size * 2);
+  cublasSetStream(blas_handle, stream2);
+  blas<T>::gemm(blas_handle,
+      CUBLAS_OP_N, CUBLAS_OP_T,
+      hidden_size * 2, hidden_size, batch_size * time_step,
+      &alpha,
+      dwx, hidden_size * 2,
+      h, hidden_size,
+      &beta_sum,
+      du, hidden_size * 2);
 
-  // cublasSetStream(blas_handle, save_stream);
+  cublasSetStream(blas_handle, save_stream);
 
 }
 
