@@ -175,6 +175,9 @@ if __name__ == "__main__":
     wx = x_ @ w_.T 
     wx = wx.permute(1, 0, 2)
 
+    # out = ApplyLiGRUCell.apply(True, wx, u_, h_init_, drop_mask_)
+    # out.sum().backward()
+
     print(torch.autograd.gradcheck(ApplyLiGRUCell.apply,
      [True, wx, u_, h_init_, drop_mask_]
     ))

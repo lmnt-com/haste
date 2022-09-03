@@ -13,15 +13,13 @@
 // limitations under the License.
 // ==============================================================================
 
-// modified from 
-
 #include <cassert>
 
 #include "haste.h"
 
 namespace {
 
-template<typename T>
+template<typename T, bool ApplyBeta>
 __global__
 void LayerNorm(
     const int batch_size,
@@ -79,31 +77,15 @@ void LayerNorm(
   const T invstd = rsqrt(shared[batch_block_idx] / hidden_size + static_cast<T>(1e-5));
 
   for (int i = index; i < hidden_size; i += stride) {
+    if (ApplyBeta)
+      y[batch_idx + i] = (x[batch_idx + i] - mean) * invstd;
+    else
       y[batch_idx + i] = (x[batch_idx + i] - mean) * invstd;
   }
 
   cache[batch * 2 + 0] = mean;
   cache[batch * 2 + 1] = invstd;
 }
-
-
-// #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 700)
-
-// template<typename T>
-// __global__
-// void LayerNorm(
-//     const int batch_size,
-//     const int hidden_size,
-//     const half* gamma,
-//     const half* beta,
-//     const half* x,
-//     half* y,
-//     half* cache) {
-//     device_assert_fail("FP16 is not supported on compute capability < 7.0.");
-
-//   }
-    
-// #endif
 
 }  // anonymous namespace
 
@@ -144,20 +126,29 @@ void ForwardPass<T>::RunPartial(
   gridDim.x = (minibatch + blockDim.x - 1) / blockDim.x;
   const int shared_mem_size = sizeof(T) * blockDim.x * blockDim.y;
 
-  LayerNorm<T><<<gridDim, blockDim, shared_mem_size, stream>>>(
-      minibatch,
-      hidden_size_,
-      nullptr,
-      nullptr,
-      x,
-      y,
-      cache_ + partial_ * 2);
-
+  if (beta_) {
+    LayerNorm<T, true><<<gridDim, blockDim, shared_mem_size, stream>>>(
+        minibatch,
+        hidden_size_,
+        gamma_,
+        beta_,
+        x,
+        y,
+        cache_ + partial_ * 2);
+  } else {
+    LayerNorm<T, false><<<gridDim, blockDim, shared_mem_size, stream>>>(
+        minibatch,
+        hidden_size_,
+        gamma_,
+        nullptr,
+        x,
+        y,
+        cache_ + partial_ * 2);
+  }
 
   partial_ += minibatch;
 }
 
-// template class ForwardPass<half>;
 template class ForwardPass<float>;
 template class ForwardPass<double>;
 

@@ -55,26 +55,12 @@ void PointwiseOperations(const int batch_dim,
   h_out[output_idx] = cur_h_value;
 }
 
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 700)
-template<typename T, bool Training>
-__global__
-void PointwiseOperations(const int batch_dim,
-                         const int hidden_dim,
-                         const half* wx,
-                         const half* uh,
-                         const half* h,
-                         half* h_out,
-                         half* v,
-                         const half* drop_mask) {
-  device_assert_fail("FP16 is not supported on compute capability < 7.0.");
-}
-#endif
 
 }  // anonymous namespace
 
 namespace haste {
 namespace v0 {
-namespace ligru {
+namespace ligru_v2 {
 
 template<typename T>
 struct ForwardPass<T>::private_data {
@@ -132,7 +118,9 @@ void ForwardPass<T>::IterateInternal(
     T* h_out,  
     T* v,      
     T* tmp_wx,  
-    T* tmp_uh,   
+    T* tmp_uh, 
+    T* tmp_uh_norm, 
+    layer_norm::ForwardPass<T>& layer_norm1,  
     const T* drop_mask) {
     static const T alpha = static_cast<T>(1.0);
     static const T beta = static_cast<T>(0.0);
@@ -154,6 +142,7 @@ void ForwardPass<T>::IterateInternal(
         h, hidden_size,
         &beta,
         tmp_uh, hidden_size * 2);
+    layer_norm1.RunPartial(stream1, batch_size, tmp_uh, tmp_uh_norm);
 
     // Compute launch configuration for pointwise operations kernel.
     const dim3 blockDim(32, 16);
@@ -168,7 +157,7 @@ void ForwardPass<T>::IterateInternal(
           batch_size,
           hidden_size,
           tmp_wx,
-          tmp_uh,
+          tmp_uh_norm,
           h,
           h_out,
           v,
@@ -179,7 +168,7 @@ void ForwardPass<T>::IterateInternal(
           batch_size,
           hidden_size,
           tmp_wx,
-          tmp_uh,
+          tmp_uh_norm,
           h,
           h_out,
           v,
@@ -195,14 +184,26 @@ void ForwardPass<T>::Run(
     const T* u,
     T* h,
     T* v,
+    layer_norm::ForwardPass<T>& layer_norm1,
+    T* tmp_uh_norm,
     T* tmp_uh,
     const T* drop_mask) {
     
-    const int batch_size = data_->batch_size;
-    const int hidden_size = data_->hidden_size;
+  static const T alpha = static_cast<T>(1.0);
+  static const T beta = static_cast<T>(0.0);
+
+  const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
+
+  const int batch_size = data_->batch_size;
+  const int hidden_size = data_->hidden_size;
+  const cublasHandle_t blas_handle = data_->blas_handle;
+  const cudaStream_t stream2 = data_->stream[1];
+  const cudaEvent_t event = data_->event;
+
+  cudaStream_t save_stream;
+  cublasGetStream(blas_handle, &save_stream);
 
   const int NH = batch_size * hidden_size;
-  // auto i = seq_length;
 
   for (int i = 0; i < seq_length; ++i) {
     IterateInternal
@@ -212,14 +213,16 @@ void ForwardPass<T>::Run(
         h + (i + 1) * NH,  
         v + i * NH * 3,      
         wx + i * NH * 2,  
-        tmp_uh,   
+        tmp_uh + i * NH * 2,   
+        tmp_uh_norm,
+        layer_norm1,
         drop_mask);
 
   }
+
+
 }
 
-
-template struct ForwardPass<half>;
 template struct ForwardPass<float>;
 template struct ForwardPass<double>;
 

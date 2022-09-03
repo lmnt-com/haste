@@ -96,8 +96,11 @@ std::vector<Tensor> ligru_backward(
     const auto batch_size = wx_t.size(1);
     const auto hidden_size = wx_t.size(2) / 2;
 
-
-
+    // if(wx_t.dtype() == at::kHalf) {
+    //   std::cout << wx_t.dtype() << std::endl;
+    //   wx_t = wx_t.to(torch::kFloat32);
+    //   std::cout << wx_t.dtype() << std::endl;
+    // }
     // const auto input_size = wx_t.size(0);
     // const auto time_steps = wx_t.size(0);
     // const auto batch_size = wx_t.size(1);
