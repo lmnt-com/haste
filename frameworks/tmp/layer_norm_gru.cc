@@ -61,6 +61,8 @@ std::vector<Tensor> layer_norm_gru_forward(
   Tensor act_Wx = torch::empty({ time_steps, batch_size, hidden_size * 3 }, options);
   Tensor tmp_Wx_norm = torch::empty({ time_steps, batch_size, hidden_size * 3 }, options);
   Tensor act_Wx_norm_cache = torch::empty({ time_steps, batch_size, 2 }, options);
+  
+  
   Tensor act_Rh = torch::empty({ time_steps, batch_size, hidden_size * 3 }, options);
   Tensor tmp_Rh_norm = torch::empty({ batch_size, hidden_size * 3 }, options);
   Tensor act_Rh_norm_cache = torch::empty({ time_steps, batch_size, 2 }, options);
