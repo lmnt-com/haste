@@ -31,9 +31,8 @@ class ApplyLiGRUCell(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, training, wx, u, h, drop_mask):
-        # x = x.permute(1, 0, 2)
 
-        tmp_uh, tmp_ln_uh, output, cache, = LIB.ligru_2_0_forward(
+        output, cache, act_uh, act_uh_norm_cache, = LIB.ligru_2_0_forward(
             training, 
             wx.contiguous(),
             h.contiguous(),
@@ -41,62 +40,48 @@ class ApplyLiGRUCell(torch.autograd.Function):
             drop_mask.contiguous()
 
         )
-
-        # print(tmp_uh)
-        # print(tmp_ln_uh)
-        ctx.save_for_backward(wx, output, u, drop_mask, cache)
+        
+        ctx.save_for_backward(
+            output, 
+            cache, 
+            act_uh, 
+            act_uh_norm_cache,
+            wx, 
+            u, 
+            drop_mask, 
+            cache
+        )
 
         return output
     
     @staticmethod
     def backward(ctx, grad_out):
 
-        wx, h, u, drop_mask, cache, = ctx.saved_tensors
+        h, cache, act_uh, act_uh_norm_cache, wx, u, drop_mask, cache, = ctx.saved_tensors
 
-        du, dwx, dh, = LIB.ligru_backward(
+        du, dwx, tmp_dwx, = LIB.ligru_2_0_backward(
             wx.contiguous(),
             u.contiguous(),
             drop_mask.contiguous(),
             h,
             cache, 
+            act_uh,
+            act_uh_norm_cache,
             grad_out.contiguous()
         )
+
+        # b1 = tmp_dwx.T.unsqueeze(1)
+        # r1 = h * b1
+        # r1 = torch.sum(r1, dim=-1)
+        # print(r1.shape)
         return None, dwx, du.T, None, None, None 
 
-def apply_ligru_cell(x, w, u, h_init, drop_mask):
-    wx = x @ w.T 
-
-    hiddens = []
-    ht = h_init
-    hiddens.append(ht)
-    act = torch.nn.ReLU()
-    norm = torch.nn.LayerNorm(u.size(0), elementwise_affine=False)
-    for k in range(wx.shape[1]):
-        gates = wx[:, k] + norm(ht @ u.T) 
-        # print("wx=",wx[:, k])
-        # print("uh=",ht @ u.T )
-        at, zt = gates.chunk(2, 1)
-        # print("at = ", at)
-        # print("gates=", gates)
-
-        # print("at = ", at)
-        zt = torch.sigmoid(zt)
-
-        # print("zt = ", zt)
-        hcand = act(at) * drop_mask
-
-        # print("hcand = ", hcand)
-        ht = zt * ht + (1 - zt) * hcand
-        hiddens.append(ht)
-
-    h = torch.stack(hiddens, dim=1)
-    return h 
 
 if __name__ == "__main__":
-    B, T, F, H = 2, 2, 2, 2
-    DTYPE = torch.float32
+    B, T, F, H = 5, 10, 5, 5
+    DTYPE = torch.double
 
-    SEED = 1 
+    SEED = 42 
     BATCH_FIRST = True 
 
 
@@ -116,11 +101,16 @@ if __name__ == "__main__":
     wx = x_ @ w_.T 
     wx = wx.permute(1, 0, 2)
 
-    out = ApplyLiGRUCell.apply(True, wx, u_, h_init_, drop_mask_)
-    print(out.permute(1, 0, 2))
-    
+    # out = ApplyLiGRUCell.apply(True, wx, u_, h_init_, drop_mask_)
+    # out.permute(1, 0, 2).sum().backward()
+    # print(out.permute(1, 0, 2))    
+    print(torch.autograd.gradcheck(ApplyLiGRUCell.apply,
+     [True, wx, u_, h_init_, drop_mask_]
+    ))
 
-    out = apply_ligru_cell(x_, w_, u_, h_init_, drop_mask_)
-    print(out)
+
+
+    # out = apply_ligru_cell(x_, w_, u_, h_init_, drop_mask_)
+    # print(out)
     # warmup(ApplyLiGRUCell.apply, True, wx, u_, h_init_, drop_mask_, n_iters=5)
     # print(benchmark(ApplyLiGRUCell.apply, True, wx, u_, h_init_, drop_mask_, n_iters=10))

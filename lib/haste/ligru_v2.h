@@ -105,9 +105,11 @@ class BackwardPass {
         const T* h,
         const T* v,
         const T* grad_out,
+        T* tmp_dwx,
         T* dwx,
         T* du,
         T* dh,
+        layer_norm::BackwardPass<T>& layer_norm1,
         const T* drop_mask);
 
   private:
@@ -117,7 +119,9 @@ class BackwardPass {
         const T* v,
         const T* dh_new,
         T* dh,
+        T* tmp_dwx,
         T* dwx,
+        layer_norm::BackwardPass<T>& layer_norm1,
         const T* drop_mask);
 
     struct private_data;

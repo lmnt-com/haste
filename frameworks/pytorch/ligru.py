@@ -52,13 +52,6 @@ class ApplyLiGRUCell(torch.autograd.Function):
 
         wx, h, u, drop_mask, cache, = ctx.saved_tensors
 
-        # wx = wx.permute(2, 0, 1)
-        # print(wx.shape)
-
-        # wx = wx.permute(2, 0, 1)
-        # print(wx.shape)
-        # u = u.permute(1, 0)
-        # print(wx.shape)
         du, dwx, dh, = LIB.ligru_backward(
             wx.contiguous(),
             u.contiguous(),
@@ -68,19 +61,6 @@ class ApplyLiGRUCell(torch.autograd.Function):
             grad_out.contiguous()
         )
 
-
-        # print(h.shape)
-        # du = dwx.permute(1, 0, 2).T @ h.permute(1, 0, 2) 
-        
-        # print(dwx.permute(2, 0, 1).T.shape)
-        # print(h.shape)
-        # print(u.shape)
-        # print(dwx.permute(2, 0, 1).T @ h[0])
-        # print(dwx.permute(1, 0, 2))
-        # print(du.permute(1, 0))
-
-        # print(du.shape)
-        # print(dwx.permute(1, 0, 2).shape)
         return None, dwx, du.T, None, None, None 
 
 class VanillaLiGRUCell(torch.autograd.Function):
