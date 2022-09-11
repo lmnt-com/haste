@@ -39,11 +39,7 @@ void LayerNormGrad(
     const T centered_x = x[batch_idx + i] - mean;
     const T z = centered_x * invstd;
 
-    atomicAdd(&dgamma[i], z * cur_dy);
-    if (ApplyBeta)
-      atomicAdd(&dbeta[i], cur_dy);
-
-    const T db = gamma[i] * cur_dy;
+    const T db = cur_dy;
     dsigma_tmp += centered_x * db;
     dmu1_tmp += centered_x;
     dmu2_tmp += db;
@@ -70,7 +66,7 @@ void LayerNormGrad(
     const T cur_dy = dy[batch_idx + i];
     const T centered_x = x[batch_idx + i] - mean;
 
-    const T db = gamma[i] * cur_dy;
+    const T db = cur_dy;
     dx[batch_idx + i] = (static_cast<T>(2.0) * centered_x * dsigma / hidden_size) +
                         (invstd * db) +
                         (dmu / hidden_size);

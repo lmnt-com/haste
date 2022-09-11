@@ -63,9 +63,9 @@ void LayerNorm(
 
   for (int i = index; i < hidden_size; i += stride) {
     if (ApplyBeta)
-      y[batch_idx + i] = (x[batch_idx + i] - mean) * invstd * gamma[i] + beta[i];
+      y[batch_idx + i] = (x[batch_idx + i] - mean) * invstd + beta[i];
     else
-      y[batch_idx + i] = (x[batch_idx + i] - mean) * invstd * gamma[i];
+      y[batch_idx + i] = (x[batch_idx + i] - mean) * invstd;
   }
 
   cache[batch * 2 + 0] = mean;
@@ -111,25 +111,15 @@ void ForwardPass<T>::RunPartial(
   gridDim.x = (minibatch + blockDim.x - 1) / blockDim.x;
   const int shared_mem_size = sizeof(T) * blockDim.x * blockDim.y;
 
-  if (beta_) {
-    LayerNorm<T, true><<<gridDim, blockDim, shared_mem_size, stream>>>(
-        minibatch,
-        hidden_size_,
-        gamma_,
-        beta_,
-        x,
-        y,
-        cache_ + partial_ * 2);
-  } else {
-    LayerNorm<T, false><<<gridDim, blockDim, shared_mem_size, stream>>>(
-        minibatch,
-        hidden_size_,
-        gamma_,
-        nullptr,
-        x,
-        y,
-        cache_ + partial_ * 2);
-  }
+  LayerNorm<T, false><<<gridDim, blockDim, shared_mem_size, stream>>>(
+      minibatch,
+      hidden_size_,
+      nullptr,
+      nullptr,
+      x,
+      y,
+      cache_ + partial_ * 2);
+  
 
   partial_ += minibatch;
 }

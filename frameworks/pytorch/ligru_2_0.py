@@ -77,6 +77,25 @@ class ApplyLiGRUCell(torch.autograd.Function):
         return None, dwx, du.T, None, None, None 
 
 
+def apply_ligru_cell(x, w, u, h_init, drop_mask):
+    wx = x @ w.T 
+
+    ln = torch.nn.LayerNorm(u.size(0), elementwise_affine=False)
+    hiddens = []
+    ht = h_init
+    act = torch.nn.ReLU()
+    for k in range(wx.shape[1]):
+        gates = wx[:, k] + ln(ht @ u.T) 
+        at, zt = gates.chunk(2, 1)
+        zt = torch.sigmoid(zt)
+        hcand = act(at) * drop_mask
+        ht = zt * ht + (1 - zt) * hcand
+        hiddens.append(ht)
+
+    h = torch.stack(hiddens, dim=1)
+    return h 
+
+
 if __name__ == "__main__":
     B, T, F, H = 5, 10, 5, 5
     DTYPE = torch.double
@@ -101,6 +120,7 @@ if __name__ == "__main__":
     wx = x_ @ w_.T 
     wx = wx.permute(1, 0, 2)
 
+    print("LiGRU 2.0 test: ")
     # out = ApplyLiGRUCell.apply(True, wx, u_, h_init_, drop_mask_)
     # out.permute(1, 0, 2).sum().backward()
     # print(out.permute(1, 0, 2))    

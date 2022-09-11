@@ -41,7 +41,7 @@ void PointwiseOperations(const int batch_dim,
   const T hcand = v[hcand_idx];
 
   // const T tmp = (static_cast<T>(1.0) - z) * dh;
-  const T dat = d_relu(a) * drop_mask[base_idx] * (static_cast<T>(1.0) - z) * dh;
+  const T dat = d_relu(a) * (static_cast<T>(1.0) - z) * dh;
   const T dzt = (h[base_idx] - hcand) * dh * (z * (static_cast<T>(1.0) - z));
 
 

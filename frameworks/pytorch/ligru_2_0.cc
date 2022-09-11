@@ -48,7 +48,7 @@ std::vector<Tensor> ligru_forward(
   CHECK_INPUT(h_init);
   CHECK_INPUT(u);
   CHECK_INPUT(drop_mask);
-
+  
   const auto options = wx.options();
   const at::cuda::CUDAGuard guard(options.device_index());
 
