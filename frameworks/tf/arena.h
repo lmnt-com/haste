@@ -24,90 +24,83 @@
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/shape_inference.h"
 
-template<typename T>
-class TensorView {
-  public:
-    TensorView(T* ptr, const tensorflow::TensorShape& shape) {
-      ptr_ = ptr;
-      leading_dim_ = shape.dim_size(0);
-      stride_ = 1LL;
-      for (int i = 1; i < shape.dims(); ++i)
-        stride_ *= shape.dim_size(i);
-    }
+template <typename T> class TensorView {
+public:
+  TensorView(T *ptr, const tensorflow::TensorShape &shape) {
+    ptr_ = ptr;
+    leading_dim_ = shape.dim_size(0);
+    stride_ = 1LL;
+    for (int i = 1; i < shape.dims(); ++i)
+      stride_ *= shape.dim_size(i);
+  }
 
-    tensorflow::int64 AllocatedBytes() const {
-      return leading_dim_ * stride_ * sizeof(T);
-    }
+  tensorflow::int64 AllocatedBytes() const {
+    return leading_dim_ * stride_ * sizeof(T);
+  }
 
-    T* data() {
-      return ptr_;
-    }
+  T *data() { return ptr_; }
 
-    T* SubSlicePtr(tensorflow::int64 i) {
-      assert(i >= 0);
-      assert(i < leading_dim_);
+  T *SubSlicePtr(tensorflow::int64 i) {
+    assert(i >= 0);
+    assert(i < leading_dim_);
 
-      return ptr_ + (i * stride_);
-    }
+    return ptr_ + (i * stride_);
+  }
 
-    const tensorflow::int64 NumElements() const {
-      return leading_dim_ * stride_;
-    }
+  const tensorflow::int64 NumElements() const { return leading_dim_ * stride_; }
 
-  private:
-    T* ptr_;
-    tensorflow::int64 leading_dim_;
-    tensorflow::int64 stride_;
+private:
+  T *ptr_;
+  tensorflow::int64 leading_dim_;
+  tensorflow::int64 stride_;
 };
 
-template<typename T>
-class Arena {
-  public:
-    struct Entry {
-      std::string name;
-      TensorView<T> view;
-    };
+template <typename T> class Arena {
+public:
+  struct Entry {
+    std::string name;
+    TensorView<T> view;
+  };
 
-    Arena(std::initializer_list<Entry> map) : map_(map) {}
-    Arena(const std::vector<Entry>& map) : map_(map) {}
+  Arena(std::initializer_list<Entry> map) : map_(map) {}
+  Arena(const std::vector<Entry> &map) : map_(map) {}
 
-    TensorView<T> operator[](const std::string& name) {
-      for (auto& unit : map_)
-        if (name == unit.name)
-          return unit.view;
-      assert(false && "Invalid tensor name.");
-    }
+  TensorView<T> operator[](const std::string &name) {
+    for (auto &unit : map_)
+      if (name == unit.name)
+        return unit.view;
+    assert(false && "Invalid tensor name.");
+  }
 
-  private:
-    std::vector<Entry> map_;
+private:
+  std::vector<Entry> map_;
 };
 
-template<typename T>
-class ArenaLayout {
-  public:
-    struct Entry {
-      std::string name;
-      tensorflow::TensorShape shape;
-    };
+template <typename T> class ArenaLayout {
+public:
+  struct Entry {
+    std::string name;
+    tensorflow::TensorShape shape;
+  };
 
-    ArenaLayout(std::initializer_list<Entry> layout) : layout_(layout) {}
+  ArenaLayout(std::initializer_list<Entry> layout) : layout_(layout) {}
 
-    tensorflow::int64 NumElements() const {
-      tensorflow::int64 total_elements = 0;
-      for (const auto& entry : layout_)
-        total_elements += entry.shape.num_elements();
-      return total_elements;
+  tensorflow::int64 NumElements() const {
+    tensorflow::int64 total_elements = 0;
+    for (const auto &entry : layout_)
+      total_elements += entry.shape.num_elements();
+    return total_elements;
+  }
+
+  Arena<T> Realize(T *ptr) const {
+    std::vector<typename Arena<T>::Entry> map;
+    for (const auto &entry : layout_) {
+      map.push_back({entry.name, TensorView<T>(ptr, entry.shape)});
+      ptr += entry.shape.num_elements();
     }
+    return Arena<T>(map);
+  }
 
-    Arena<T> Realize(T* ptr) const {
-      std::vector<typename Arena<T>::Entry> map;
-      for (const auto& entry : layout_) {
-        map.push_back({ entry.name, TensorView<T>(ptr, entry.shape) });
-        ptr += entry.shape.num_elements();
-      }
-      return Arena<T>(map);
-    }
-
-  private:
-    std::vector<Entry> layout_;
+private:
+  std::vector<Entry> layout_;
 };

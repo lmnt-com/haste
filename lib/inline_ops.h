@@ -17,53 +17,40 @@
 
 #include <cuda_fp16.h>
 
-template<typename T>
-__device__ __forceinline__
-T sigmoid(const T x) {
+template <typename T> __device__ __forceinline__ T sigmoid(const T x) {
   return static_cast<T>(1.0) / (static_cast<T>(1.0) + exp(-x));
 }
 
-template<typename T>
-__device__ __forceinline__
-T relu(const T x) {
+template <typename T> __device__ __forceinline__ T relu(const T x) {
   return (x > static_cast<T>(0.) ? x : static_cast<T>(0.));
 }
 
-
-template<typename T>
-__device__ __forceinline__
-T tanh(const T x) {
+template <typename T> __device__ __forceinline__ T tanh(const T x) {
   return std::tanh(x);
 }
 
-template<typename T>
-__device__ __forceinline__
-T d_sigmoid(const T sigmoid_output) {
+template <typename T>
+__device__ __forceinline__ T d_sigmoid(const T sigmoid_output) {
   return sigmoid_output * (static_cast<T>(1.0) - sigmoid_output);
 }
 
-template<typename T>
-__device__ __forceinline__
-T d_tanh(const T tanh_output) {
+template <typename T> __device__ __forceinline__ T d_tanh(const T tanh_output) {
   return (static_cast<T>(1.0) - tanh_output * tanh_output);
 }
 
-template<typename T>
-__device__ __forceinline__
-T d_relu(const T x) {
+template <typename T> __device__ __forceinline__ T d_relu(const T x) {
   return (x > static_cast<T>(0.) ? static_cast<T>(1.) : static_cast<T>(0.));
 }
 
-
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 600)
 
-__device__ __forceinline__
-double atomicAdd(double* address, double val) {
-  unsigned long long int* address_as_ull = (unsigned long long int*)address;
+__device__ __forceinline__ double atomicAdd(double *address, double val) {
+  unsigned long long int *address_as_ull = (unsigned long long int *)address;
   unsigned long long int old = *address_as_ull, assumed;
   do {
-      assumed = old;
-      old = atomicCAS(address_as_ull, assumed, __double_as_longlong(val + __longlong_as_double(assumed)));
+    assumed = old;
+    old = atomicCAS(address_as_ull, assumed,
+                    __double_as_longlong(val + __longlong_as_double(assumed)));
   } while (assumed != old);
   return __longlong_as_double(old);
 }
@@ -72,21 +59,15 @@ double atomicAdd(double* address, double val) {
 
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 600)
 
-template<>
-__device__ __forceinline__
-half sigmoid(const half x) {
+template <> __device__ __forceinline__ half sigmoid(const half x) {
   return static_cast<half>(1.0) / (static_cast<half>(1.0) + hexp(-x));
 }
 
-template<>
-__device__ __forceinline__
-half relu(const half x) {
+template <> __device__ __forceinline__ half relu(const half x) {
   return (x > static_cast<half>(0.) ? x : static_cast<half>(0.));
 }
 
-template<>
-__device__ __forceinline__
-half tanh(const half x) {
+template <> __device__ __forceinline__ half tanh(const half x) {
   return std::tanh(float(x));
 }
 

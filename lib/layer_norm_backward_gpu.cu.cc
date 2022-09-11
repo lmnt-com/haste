@@ -5,30 +5,22 @@
 
 namespace {
 
-template<typename T, bool ApplyBeta>
-__global__
-void LayerNormGrad(
-    const int batch_size,
-    const int hidden_size,
-    const T* gamma,
-    const T* x,
-    const T* dy,
-    T* dgamma,
-    T* dbeta,
-    T* dx,
-    T* cache) {
+template <typename T, bool ApplyBeta>
+__global__ void LayerNormGrad(const int batch_size, const int hidden_size,
+                              const T *gamma, const T *x, const T *dy,
+                              T *dgamma, T *dbeta, T *dx, T *cache) {
   const int batch = blockDim.x * blockIdx.x + threadIdx.x;
   if (batch >= batch_size)
     return;
 
   extern __shared__ int shared_var[];
-  T* shared = reinterpret_cast<T*>(shared_var);
+  T *shared = reinterpret_cast<T *>(shared_var);
   const int index = threadIdx.y;
   const int stride = blockDim.y;
   const int batch_idx = batch * hidden_size;
   const int batch_block_idx = threadIdx.x * stride * 3;
 
-  const T mean   = cache[batch * 2 + 0];
+  const T mean = cache[batch * 2 + 0];
   const T invstd = cache[batch * 2 + 1];
 
   T dsigma_tmp = static_cast<T>(0.0);
@@ -51,15 +43,20 @@ void LayerNormGrad(
 
   for (int s = stride / 2; s > 0; s >>= 1) {
     if (index < s) {
-      shared[batch_block_idx + index * 3 + 0] += shared[batch_block_idx + (index + s) * 3 + 0];
-      shared[batch_block_idx + index * 3 + 1] += shared[batch_block_idx + (index + s) * 3 + 1];
-      shared[batch_block_idx + index * 3 + 2] += shared[batch_block_idx + (index + s) * 3 + 2];
+      shared[batch_block_idx + index * 3 + 0] +=
+          shared[batch_block_idx + (index + s) * 3 + 0];
+      shared[batch_block_idx + index * 3 + 1] +=
+          shared[batch_block_idx + (index + s) * 3 + 1];
+      shared[batch_block_idx + index * 3 + 2] +=
+          shared[batch_block_idx + (index + s) * 3 + 2];
     }
     __syncthreads();
   }
 
-  const T dsigma = static_cast<T>(-0.5) * shared[batch_block_idx + 0] * invstd * invstd * invstd;
-  const T dmu = (static_cast<T>(-2.0) * shared[batch_block_idx + 1] * dsigma / hidden_size) -
+  const T dsigma = static_cast<T>(-0.5) * shared[batch_block_idx + 0] * invstd *
+                   invstd * invstd;
+  const T dmu = (static_cast<T>(-2.0) * shared[batch_block_idx + 1] * dsigma /
+                 hidden_size) -
                 (shared[batch_block_idx + 2] * invstd);
 
   for (int i = index; i < hidden_size; i += stride) {
@@ -67,50 +64,34 @@ void LayerNormGrad(
     const T centered_x = x[batch_idx + i] - mean;
 
     const T db = cur_dy;
-    dx[batch_idx + i] = (static_cast<T>(2.0) * centered_x * dsigma / hidden_size) +
-                        (invstd * db) +
-                        (dmu / hidden_size);
+    dx[batch_idx + i] =
+        (static_cast<T>(2.0) * centered_x * dsigma / hidden_size) +
+        (invstd * db) + (dmu / hidden_size);
   }
 }
 
-}  // anonymous namespace
+} // anonymous namespace
 
 namespace haste {
 namespace v0 {
 namespace layer_norm {
 
-template<typename T>
-BackwardPass<T>::BackwardPass(
-    const int batch_size,
-    const int hidden_size,
-    const T* gamma,
-    const T* beta,
-    const T* x,
-    T* dgamma,
-    T* dbeta,
-    T* cache)
-        : batch_size_(batch_size),
-          hidden_size_(hidden_size),
-          gamma_(gamma),
-          beta_(beta),
-          x_(x),
-          dgamma_(dgamma),
-          dbeta_(dbeta),
-          cache_(cache),
-          partial_(batch_size) {
-}
+template <typename T>
+BackwardPass<T>::BackwardPass(const int batch_size, const int hidden_size,
+                              const T *gamma, const T *beta, const T *x,
+                              T *dgamma, T *dbeta, T *cache)
+    : batch_size_(batch_size), hidden_size_(hidden_size), gamma_(gamma),
+      beta_(beta), x_(x), dgamma_(dgamma), dbeta_(dbeta), cache_(cache),
+      partial_(batch_size) {}
 
-template<typename T>
-void BackwardPass<T>::Run(const cudaStream_t& stream, const T* dy, T* dx) {
+template <typename T>
+void BackwardPass<T>::Run(const cudaStream_t &stream, const T *dy, T *dx) {
   RunPartial(stream, batch_size_, dy, dx);
 }
 
-template<typename T>
-void BackwardPass<T>::RunPartial(
-    const cudaStream_t& stream,
-    const int minibatch,
-    const T* dy,
-    T* dx) {
+template <typename T>
+void BackwardPass<T>::RunPartial(const cudaStream_t &stream,
+                                 const int minibatch, const T *dy, T *dx) {
   assert(partial_ - minibatch >= 0);
 
   dim3 blockDim(4, 256);
@@ -120,25 +101,13 @@ void BackwardPass<T>::RunPartial(
 
   if (beta_ && dbeta_) {
     LayerNormGrad<T, true><<<gridDim, blockDim, shared_mem_size, stream>>>(
-        minibatch,
-        hidden_size_,
-        gamma_,
-        x_ + (partial_ - minibatch) * hidden_size_,
-        dy,
-        dgamma_,
-        dbeta_,
-        dx,
+        minibatch, hidden_size_, gamma_,
+        x_ + (partial_ - minibatch) * hidden_size_, dy, dgamma_, dbeta_, dx,
         cache_ + (partial_ - minibatch) * 2);
   } else {
     LayerNormGrad<T, false><<<gridDim, blockDim, shared_mem_size, stream>>>(
-        minibatch,
-        hidden_size_,
-        gamma_,
-        x_ + (partial_ - minibatch) * hidden_size_,
-        dy,
-        dgamma_,
-        nullptr,
-        dx,
+        minibatch, hidden_size_, gamma_,
+        x_ + (partial_ - minibatch) * hidden_size_, dy, dgamma_, nullptr, dx,
         cache_ + (partial_ - minibatch) * 2);
   }
 
@@ -148,6 +117,6 @@ void BackwardPass<T>::RunPartial(
 template class BackwardPass<float>;
 template class BackwardPass<double>;
 
-}  // namespace layer_norm
-}  // namespace v0
-}  // namespace haste
+} // namespace layer_norm
+} // namespace v0
+} // namespace haste

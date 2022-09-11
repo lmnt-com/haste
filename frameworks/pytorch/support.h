@@ -17,21 +17,18 @@
 
 #include <torch/extension.h>
 
-#define CHECK_CUDA(x) TORCH_CHECK(x.device().is_cuda(), #x " must be a CUDA tensor")
-#define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
-#define CHECK_INPUT(x) CHECK_CUDA(x); CHECK_CONTIGUOUS(x)
+#define CHECK_CUDA(x)                                                          \
+  TORCH_CHECK(x.device().is_cuda(), #x " must be a CUDA tensor")
+#define CHECK_CONTIGUOUS(x)                                                    \
+  TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
+#define CHECK_INPUT(x)                                                         \
+  CHECK_CUDA(x);                                                               \
+  CHECK_CONTIGUOUS(x)
 
-template<typename U>
-struct native_type {
-  using T = U;
-};
+template <typename U> struct native_type { using T = U; };
 
-template<>
-struct native_type<c10::Half> {
-  using T = __half;
-};
+template <> struct native_type<c10::Half> { using T = __half; };
 
-template<typename U>
-typename native_type<U>::T* ptr(torch::Tensor t) {
-  return reinterpret_cast<typename native_type<U>::T*>(t.data_ptr<U>());
+template <typename U> typename native_type<U>::T *ptr(torch::Tensor t) {
+  return reinterpret_cast<typename native_type<U>::T *>(t.data_ptr<U>());
 }

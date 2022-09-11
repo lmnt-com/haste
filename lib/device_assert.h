@@ -15,14 +15,9 @@
 
 #pragma once
 
-extern "C"
-__host__ __device__
-void __assertfail(
-    const char * __assertion,
-    const char *__file,
-    unsigned int __line,
-    const char *__function,
-    size_t charsize);
+extern "C" __host__ __device__ void
+__assertfail(const char *__assertion, const char *__file, unsigned int __line,
+             const char *__function, size_t charsize);
 
-#define device_assert_fail(msg) \
-      __assertfail((msg), __FILE__, __LINE__, __PRETTY_FUNCTION__, sizeof(char))
+#define device_assert_fail(msg)                                                \
+  __assertfail((msg), __FILE__, __LINE__, __PRETTY_FUNCTION__, sizeof(char))

@@ -15,78 +15,49 @@
 
 #pragma once
 
-#include <cuda_runtime_api.h>
 #include <cublas_v2.h>
+#include <cuda_runtime_api.h>
 
 namespace haste {
 namespace v0 {
 namespace layer_norm_indrnn {
 
-template<typename T>
-class ForwardPass {
-  public:
-    ForwardPass(
-        const bool training,
-        const int batch_size,
-        const int input_size,
-        const int hidden_size,
-        const cublasHandle_t& blas_handle,
-        const cudaStream_t& stream = 0);
+template <typename T> class ForwardPass {
+public:
+  ForwardPass(const bool training, const int batch_size, const int input_size,
+              const int hidden_size, const cublasHandle_t &blas_handle,
+              const cudaStream_t &stream = 0);
 
-    ~ForwardPass();
+  ~ForwardPass();
 
-    void Run(
-        const int steps,
-        const T* W,
-        const T* u,
-        const T* b,
-        const T* x,
-        T* h,
-        T* workspace,
-        T* act_Wx,
-        layer_norm::ForwardPass<T>& layer_norm1,
-        const float zoneout_prob,
-        const T* zoneout_mask);
+  void Run(const int steps, const T *W, const T *u, const T *b, const T *x,
+           T *h, T *workspace, T *act_Wx,
+           layer_norm::ForwardPass<T> &layer_norm1, const float zoneout_prob,
+           const T *zoneout_mask);
 
-  private:
-    struct private_data;
-    private_data* data_;
+private:
+  struct private_data;
+  private_data *data_;
 };
 
-template<typename T>
-class BackwardPass {
-  public:
-    BackwardPass(
-        const int batch_size,
-        const int input_size,
-        const int hidden_size,
-        const cublasHandle_t& blas_handle,
-        const cudaStream_t& stream = 0);
+template <typename T> class BackwardPass {
+public:
+  BackwardPass(const int batch_size, const int input_size,
+               const int hidden_size, const cublasHandle_t &blas_handle,
+               const cudaStream_t &stream = 0);
 
-    ~BackwardPass();
+  ~BackwardPass();
 
-    void Run(
-        const int steps,
-        const T* W_t,
-        const T* u,
-        const T* b,
-        const T* x_t,
-        const T* h,
-        const T* dh_new,
-        T* dx,
-        T* dW,
-        T* du,
-        T* db,
-        T* dh,
-        T* workspace,
-        layer_norm::BackwardPass<T>& layer_norm1,
-        const T* zoneout_mask);
+  void Run(const int steps, const T *W_t, const T *u, const T *b, const T *x_t,
+           const T *h, const T *dh_new, T *dx, T *dW, T *du, T *db, T *dh,
+           T *workspace, layer_norm::BackwardPass<T> &layer_norm1,
+           const T *zoneout_mask);
 
-  private:
-    struct private_data;
-    private_data* data_;
+private:
+  struct private_data;
+  private_data *data_;
 };
 
-}  // namespace layer_norm_indrnn
-}  // namespace v0
-}  // namespace haste
+} // namespace layer_norm_indrnn
+} // namespace v0
+} // namespace haste

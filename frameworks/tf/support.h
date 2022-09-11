@@ -22,11 +22,9 @@ namespace tensorflow {
 class OpKernelContext;
 }
 
-#define REGISTER_GPU_KERNEL(NAME, T)                 \
-  REGISTER_KERNEL_BUILDER(Name(#NAME)                \
-                            .Device(DEVICE_GPU)      \
-                            .TypeConstraint<T>("R"), \
-                          NAME##Op<T>)
+#define REGISTER_GPU_KERNEL(NAME, T)                                           \
+  REGISTER_KERNEL_BUILDER(                                                     \
+      Name(#NAME).Device(DEVICE_GPU).TypeConstraint<T>("R"), NAME##Op<T>)
 
-cublasHandle_t GetCublasHandle(tensorflow::OpKernelContext* context);
-const cudaStream_t& GetCudaStream(tensorflow::OpKernelContext* context);
+cublasHandle_t GetCublasHandle(tensorflow::OpKernelContext *context);
+const cudaStream_t &GetCudaStream(tensorflow::OpKernelContext *context);

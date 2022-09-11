@@ -4,22 +4,16 @@
 
 namespace {
 
-template<typename T, bool ApplyBeta>
-__global__
-void LayerNorm(
-    const int batch_size,
-    const int hidden_size,
-    const T* gamma,
-    const T* beta,
-    const T* x,
-    T* y,
-    T* cache) {
+template <typename T, bool ApplyBeta>
+__global__ void LayerNorm(const int batch_size, const int hidden_size,
+                          const T *gamma, const T *beta, const T *x, T *y,
+                          T *cache) {
   const int batch = blockDim.x * blockIdx.x + threadIdx.x;
   if (batch >= batch_size)
     return;
 
   extern __shared__ int shared_var[];
-  T* shared = reinterpret_cast<T*>(shared_var);
+  T *shared = reinterpret_cast<T *>(shared_var);
   const int index = threadIdx.y;
   const int stride = blockDim.y;
   const int batch_idx = batch * hidden_size;
@@ -40,7 +34,8 @@ void LayerNorm(
     __syncthreads();
   }
 
-  // Make sure this read completes before we start writing to `shared` again below.
+  // Make sure this read completes before we start writing to `shared` again
+  // below.
   const T mean = shared[batch_block_idx] / hidden_size;
   __syncthreads();
 
@@ -59,7 +54,8 @@ void LayerNorm(
     __syncthreads();
   }
 
-  const T invstd = rsqrt(shared[batch_block_idx] / hidden_size + static_cast<T>(1e-5));
+  const T invstd =
+      rsqrt(shared[batch_block_idx] / hidden_size + static_cast<T>(1e-5));
 
   for (int i = index; i < hidden_size; i += stride) {
     if (ApplyBeta)
@@ -72,38 +68,26 @@ void LayerNorm(
   cache[batch * 2 + 1] = invstd;
 }
 
-}  // anonymous namespace
+} // anonymous namespace
 
 namespace haste {
 namespace v0 {
 namespace layer_norm {
 
-template<typename T>
-ForwardPass<T>::ForwardPass(
-    const int batch_size,
-    const int hidden_size,
-    const T* gamma,
-    const T* beta,
-    T* cache)
-        : batch_size_(batch_size),
-          hidden_size_(hidden_size),
-          gamma_(gamma),
-          beta_(beta),
-          cache_(cache),
-          partial_(0) {
-}
+template <typename T>
+ForwardPass<T>::ForwardPass(const int batch_size, const int hidden_size,
+                            const T *gamma, const T *beta, T *cache)
+    : batch_size_(batch_size), hidden_size_(hidden_size), gamma_(gamma),
+      beta_(beta), cache_(cache), partial_(0) {}
 
-template<typename T>
-void ForwardPass<T>::Run(const cudaStream_t& stream, const T* x, T* y) {
+template <typename T>
+void ForwardPass<T>::Run(const cudaStream_t &stream, const T *x, T *y) {
   RunPartial(stream, batch_size_, x, y);
 }
 
-template<typename T>
-void ForwardPass<T>::RunPartial(
-    const cudaStream_t& stream,
-    const int minibatch,
-    const T* x,
-    T* y) {
+template <typename T>
+void ForwardPass<T>::RunPartial(const cudaStream_t &stream, const int minibatch,
+                                const T *x, T *y) {
   assert(partial_ + minibatch <= batch_size_);
 
   dim3 blockDim(4, 256);
@@ -112,14 +96,7 @@ void ForwardPass<T>::RunPartial(
   const int shared_mem_size = sizeof(T) * blockDim.x * blockDim.y;
 
   LayerNorm<T, false><<<gridDim, blockDim, shared_mem_size, stream>>>(
-      minibatch,
-      hidden_size_,
-      nullptr,
-      nullptr,
-      x,
-      y,
-      cache_ + partial_ * 2);
-  
+      minibatch, hidden_size_, nullptr, nullptr, x, y, cache_ + partial_ * 2);
 
   partial_ += minibatch;
 }
@@ -127,6 +104,6 @@ void ForwardPass<T>::RunPartial(
 template class ForwardPass<float>;
 template class ForwardPass<double>;
 
-}  // namespace layer_norm
-}  // namespace v0
-}  // namespace haste
+} // namespace layer_norm
+} // namespace v0
+} // namespace haste

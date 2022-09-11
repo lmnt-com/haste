@@ -22,21 +22,11 @@
 
 namespace {
 
-template<typename T, bool ApplyZoneout>
-__global__
-void IndrnnBwdOps(
-    const int steps,
-    const int batch_size,
-    const int hidden_size,
-    const T* u,
-    const T* h_prev,
-    const T* h,
-    const T* dh_new,
-    T* du_out,
-    T* db_out,
-    T* dh_inout,
-    T* dk_out,
-    const T* zoneout_mask) {
+template <typename T, bool ApplyZoneout>
+__global__ void IndrnnBwdOps(const int steps, const int batch_size,
+                             const int hidden_size, const T *u, const T *h_prev,
+                             const T *h, const T *dh_new, T *du_out, T *db_out,
+                             T *dh_inout, T *dk_out, const T *zoneout_mask) {
   const int row = blockDim.x * blockIdx.x + threadIdx.x;
   const int col = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -73,14 +63,13 @@ void IndrnnBwdOps(
   atomicAdd(&db_out[row], db_sum);
 }
 
-}  // anonymous namespace
+} // anonymous namespace
 
 namespace haste {
 namespace v0 {
 namespace indrnn {
 
-template<typename T>
-struct BackwardPass<T>::private_data {
+template <typename T> struct BackwardPass<T>::private_data {
   int batch_size;
   int input_size;
   int hidden_size;
@@ -89,13 +78,12 @@ struct BackwardPass<T>::private_data {
   cudaStream_t sync_stream;
 };
 
-template<typename T>
-BackwardPass<T>::BackwardPass(
-    const int batch_size,
-    const int input_size,
-    const int hidden_size,
-    const cublasHandle_t& blas_handle,
-    const cudaStream_t& stream) : data_(new private_data) {
+template <typename T>
+BackwardPass<T>::BackwardPass(const int batch_size, const int input_size,
+                              const int hidden_size,
+                              const cublasHandle_t &blas_handle,
+                              const cudaStream_t &stream)
+    : data_(new private_data) {
   data_->batch_size = batch_size;
   data_->input_size = input_size;
   data_->hidden_size = hidden_size;
@@ -104,8 +92,7 @@ BackwardPass<T>::BackwardPass(
   cudaStreamCreate(&data_->stream);
 }
 
-template<typename T>
-BackwardPass<T>::~BackwardPass() {
+template <typename T> BackwardPass<T>::~BackwardPass() {
   if (data_->sync_stream) {
     cudaEvent_t event;
     cudaEventCreateWithFlags(&event, cudaEventDisableTiming);
@@ -119,22 +106,11 @@ BackwardPass<T>::~BackwardPass() {
   delete data_;
 }
 
-template<typename T>
-void BackwardPass<T>::Run(
-    const int steps,
-    const T* W_t,
-    const T* u,
-    const T* b,
-    const T* x_t,
-    const T* h,
-    const T* dh_new,
-    T* dx,
-    T* dW,
-    T* du,
-    T* db,
-    T* dh,
-    T* workspace,
-    const T* zoneout_mask) {
+template <typename T>
+void BackwardPass<T>::Run(const int steps, const T *W_t, const T *u, const T *b,
+                          const T *x_t, const T *h, const T *dh_new, T *dx,
+                          T *dW, T *du, T *db, T *dh, T *workspace,
+                          const T *zoneout_mask) {
   const T alpha = static_cast<T>(1.0);
   const T beta = static_cast<T>(0.0);
 
@@ -147,61 +123,30 @@ void BackwardPass<T>::Run(
   const cudaStream_t stream = data_->stream;
 
   const dim3 blockDim(64, 16);
-  const dim3 gridDim(
-      (hidden_size + blockDim.x - 1) / blockDim.x,
-      (batch_size + blockDim.y - 1) / blockDim.y);
+  const dim3 gridDim((hidden_size + blockDim.x - 1) / blockDim.x,
+                     (batch_size + blockDim.y - 1) / blockDim.y);
   const int NH = batch_size * hidden_size;
   if (zoneout_mask) {
     IndrnnBwdOps<T, true><<<gridDim, blockDim, 0, stream>>>(
-        steps,
-        batch_size,
-        hidden_size,
-        u,
-        h,
-        h + NH,
-        dh_new + NH,
-        du,
-        db,
-        dh,
-        workspace,
-        zoneout_mask);
+        steps, batch_size, hidden_size, u, h, h + NH, dh_new + NH, du, db, dh,
+        workspace, zoneout_mask);
   } else {
     IndrnnBwdOps<T, false><<<gridDim, blockDim, 0, stream>>>(
-        steps,
-        batch_size,
-        hidden_size,
-        u,
-        h,
-        h + NH,
-        dh_new + NH,
-        du,
-        db,
-        dh,
-        workspace,
-        nullptr);
+        steps, batch_size, hidden_size, u, h, h + NH, dh_new + NH, du, db, dh,
+        workspace, nullptr);
   }
 
   cudaStream_t save_stream;
   cublasGetStream(blas_handle, &save_stream);
 
   cublasSetStream(blas_handle, stream);
-  blas<T>::gemm(blas_handle,
-      CUBLAS_OP_N, CUBLAS_OP_N,
-      hidden_size, input_size, batch_size * steps,
-      &alpha,
-      workspace, hidden_size,
-      x_t, batch_size * steps,
-      &beta,
-      dW, hidden_size);
+  blas<T>::gemm(blas_handle, CUBLAS_OP_N, CUBLAS_OP_N, hidden_size, input_size,
+                batch_size * steps, &alpha, workspace, hidden_size, x_t,
+                batch_size * steps, &beta, dW, hidden_size);
 
-  blas<T>::gemm(blas_handle,
-      CUBLAS_OP_N, CUBLAS_OP_N,
-      input_size, steps * batch_size, hidden_size,
-      &alpha,
-      W_t, input_size,
-      workspace, hidden_size,
-      &beta,
-      dx, input_size);
+  blas<T>::gemm(blas_handle, CUBLAS_OP_N, CUBLAS_OP_N, input_size,
+                steps * batch_size, hidden_size, &alpha, W_t, input_size,
+                workspace, hidden_size, &beta, dx, input_size);
 
   cublasSetStream(blas_handle, save_stream);
 }
@@ -209,6 +154,6 @@ void BackwardPass<T>::Run(
 template class BackwardPass<float>;
 template class BackwardPass<double>;
 
-}  // namespace indrnn
-}  // namespace v0
-}  // namespace haste
+} // namespace indrnn
+} // namespace v0
+} // namespace haste
