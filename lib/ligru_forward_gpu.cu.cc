@@ -5,7 +5,7 @@
 
 #include "blas.h"
 #include "device_assert.h"
-#include "haste.h"
+#include "ligru.h"
 #include "inline_ops.h"
 
 namespace {

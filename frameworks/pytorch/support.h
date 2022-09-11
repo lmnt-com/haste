@@ -13,6 +13,8 @@
 // limitations under the License.
 // ==============================================================================
 
+// Modified from https://github.com/lmnt-com/haste/blob/master/frameworks/pytorch/support.h
+
 #pragma once
 
 #include <torch/extension.h>

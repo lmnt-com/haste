@@ -37,15 +37,6 @@ haste:
 	$(AR) $(AR_FLAGS) lib/*.o
 
 # Dependencies handled by setup.py
-haste_tf:
-	@$(eval TMP := $(shell mktemp -d))
-	@cp -r . $(TMP)
-	@cat build/common.py build/setup.tf.py > $(TMP)/setup.py
-	@(cd $(TMP); $(PYTHON) setup.py -q bdist_wheel)
-	@cp $(TMP)/dist/*.whl .
-	@rm -rf $(TMP)
-
-# Dependencies handled by setup.py
 haste_pytorch:
 	@$(eval TMP := $(shell mktemp -d))
 	@cp -r . $(TMP)

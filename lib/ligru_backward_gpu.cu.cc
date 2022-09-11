@@ -3,7 +3,7 @@
 
 #include "blas.h"
 #include "device_assert.h"
-#include "haste.h"
+#include "ligru.h"
 #include "inline_ops.h"
 
 // todo: backward of ligru
@@ -147,7 +147,6 @@ void BackwardPass<T>::Run(const int time_step, const T *wx_t, const T *u_t,
   // const int input_size = data_->input_size;
   const int hidden_size = data_->hidden_size;
   const cublasHandle_t blas_handle = data_->blas_handle;
-  // const cudaStream_t stream1 = data_->stream[0];
   const cudaStream_t stream2 = data_->stream[1];
   const cudaEvent_t event = data_->event;
 

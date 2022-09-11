@@ -5,7 +5,9 @@
 
 #include "blas.h"
 #include "device_assert.h"
-#include "haste.h"
+
+#include "layer_norm.h"
+#include "ligru_2_0.h"
 #include "inline_ops.h"
 
 namespace {
@@ -55,7 +57,7 @@ __global__ void PointwiseOperations(const int batch_dim, const int hidden_dim,
 
 namespace haste {
 namespace v0 {
-namespace ligru_v2 {
+namespace ligru_2_0 {
 
 template <typename T> struct ForwardPass<T>::private_data {
   bool training;

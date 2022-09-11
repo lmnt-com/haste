@@ -20,7 +20,7 @@
 
 namespace haste {
 namespace v0 {
-namespace ligru_v2 {
+namespace ligru_2_0 {
 
 template <typename T> class ForwardPass {
 public:

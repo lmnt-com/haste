@@ -18,7 +18,7 @@
 #include <torch/extension.h>
 #include <vector>
 
-#include "haste.h"
+#include "ligru.h"
 #include "support.h"
 
 namespace {

@@ -1,6 +1,6 @@
 #include <cassert>
 
-#include "haste.h"
+#include "layer_norm.h"
 
 namespace {
 
