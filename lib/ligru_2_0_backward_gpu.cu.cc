@@ -19,8 +19,7 @@ void PointwiseOperations(const int batch_dim,
                          const T* v,
                          T* dh_prev, 
                          const T* grad_out,
-                         T* dwx,
-                         const T* drop_mask) {  // Zoneout mask (only used if ApplyZoneout==true)
+                         T* dwx) {  // Zoneout mask (only used if ApplyZoneout==true)
   const int row = blockDim.x * blockIdx.x + threadIdx.x;
   const int col = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -114,8 +113,7 @@ void BackwardPass<T>::IterateInternal(
     T* dh,
     T* tmp_dwx,
     T* dwx,
-    layer_norm::BackwardPass<T>& layer_norm1,
-    const T* drop_mask)
+    layer_norm::BackwardPass<T>& layer_norm1)
 {
     const T alpha = static_cast<T>(1.0);
     const T beta_sum = static_cast<T>(1.0);
@@ -138,8 +136,7 @@ void BackwardPass<T>::IterateInternal(
         v,
         dh, 
         grad_out,
-        dwx,
-        drop_mask
+        dwx
     );
     cudaEventRecord(event, stream1);
     cublasSetStream(blas_handle,  stream1);
@@ -172,20 +169,19 @@ void BackwardPass<T>::Run(
     T* dwx,
     T* du,
     T* dh,
-    layer_norm::BackwardPass<T>& layer_norm1,
-    const T* drop_mask) {
+    layer_norm::BackwardPass<T>& layer_norm1) {
     
     const T alpha = static_cast<T>(1.0);
     const T beta_sum = static_cast<T>(1.0);
-    const T beta_assign = static_cast<T>(0.0);
+    // const T beta_assign = static_cast<T>(0.0);
 
     const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
 
     const int batch_size = data_->batch_size;
-    const int input_size = data_->input_size;
+    // const int input_size = data_->input_size;
     const int hidden_size = data_->hidden_size;
     const cublasHandle_t blas_handle = data_->blas_handle;
-    const cudaStream_t stream1 = data_->stream[0];
+    // const cudaStream_t stream1 = data_->stream[0];
     const cudaStream_t stream2 = data_->stream[1];
     const cudaEvent_t event = data_->event;
 
@@ -202,8 +198,7 @@ void BackwardPass<T>::Run(
         dh,
         tmp_dwx + i * NH * 2,
         dwx + i * NH * 2,
-        layer_norm1,
-        drop_mask);
+        layer_norm1);
     }
 
     cudaStreamWaitEvent(stream2, event, 0);

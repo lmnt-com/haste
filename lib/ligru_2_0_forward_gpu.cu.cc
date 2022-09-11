@@ -19,8 +19,7 @@ void PointwiseOperations(const int batch_dim,
                          const T* uh,
                          const T* h,
                          T* h_out,
-                         T* v,
-                         const T* drop_mask) {  
+                         T* v) {  
   const int row = blockDim.x * blockIdx.x + threadIdx.x;
   const int col = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -120,8 +119,7 @@ void ForwardPass<T>::IterateInternal(
     T* tmp_wx,  
     T* tmp_uh, 
     T* tmp_uh_norm, 
-    layer_norm::ForwardPass<T>& layer_norm1,  
-    const T* drop_mask) {
+    layer_norm::ForwardPass<T>& layer_norm1) {
     static const T alpha = static_cast<T>(1.0);
     static const T beta = static_cast<T>(0.0);
 
@@ -160,8 +158,7 @@ void ForwardPass<T>::IterateInternal(
           tmp_uh_norm,
           h,
           h_out,
-          v,
-          drop_mask);
+          v);
     }
     else {
         PointwiseOperations<T, false><<<gridDim, blockDim, 0, stream1>>>(
@@ -171,8 +168,7 @@ void ForwardPass<T>::IterateInternal(
           tmp_uh_norm,
           h,
           h_out,
-          v,
-          drop_mask); 
+          v); 
     }
 }
 
@@ -186,20 +182,19 @@ void ForwardPass<T>::Run(
     T* v,
     layer_norm::ForwardPass<T>& layer_norm1,
     T* tmp_uh_norm,
-    T* tmp_uh,
-    const T* drop_mask) {
+    T* tmp_uh) {
     
-  static const T alpha = static_cast<T>(1.0);
-  static const T beta = static_cast<T>(0.0);
+  // static const T alpha = static_cast<T>(1.0);
+  // static const T beta = static_cast<T>(0.0);
 
   const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
 
   const int batch_size = data_->batch_size;
-  const int input_size = data_->input_size;
+  // const int input_size = data_->input_size;
   const int hidden_size = data_->hidden_size;
   const cublasHandle_t blas_handle = data_->blas_handle;
-  const cudaStream_t stream2 = data_->stream[1];
-  const cudaEvent_t event = data_->event;
+  // const cudaStream_t stream2 = data_->stream[1];
+  // const cudaEvent_t event = data_->event;
 
   cudaStream_t save_stream;
   cublasGetStream(blas_handle, &save_stream);
@@ -216,8 +211,7 @@ void ForwardPass<T>::Run(
         wx + i * NH * 2,  
         tmp_uh + i * NH * 2,   
         tmp_uh_norm,
-        layer_norm1,
-        drop_mask);
+        layer_norm1);
 
   }
 

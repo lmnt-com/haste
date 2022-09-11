@@ -35,8 +35,7 @@ std::vector<Tensor> ligru_forward(
     bool training,
     Tensor wx, 
     Tensor h_init, 
-    Tensor u,
-    Tensor drop_mask
+    Tensor u
 ) {
 
   const auto seq_length = wx.size(0);
@@ -47,7 +46,6 @@ std::vector<Tensor> ligru_forward(
   CHECK_INPUT(wx);
   CHECK_INPUT(h_init);
   CHECK_INPUT(u);
-  CHECK_INPUT(drop_mask);
   
   const auto options = wx.options();
   const at::cuda::CUDAGuard guard(options.device_index());
@@ -89,8 +87,7 @@ std::vector<Tensor> ligru_forward(
         cache.data_ptr<scalar_t>(),
         layer_norm1,
         tmp_uh_norm.data_ptr<scalar_t>(),
-        act_uh.data_ptr<scalar_t>(),
-        drop_mask.data_ptr<scalar_t>());
+        act_uh.data_ptr<scalar_t>());
 
     
 
@@ -102,7 +99,6 @@ std::vector<Tensor> ligru_forward(
 std::vector<Tensor> ligru_backward(
     Tensor wx_t,
     Tensor u_t,
-    Tensor drop_mask,
     Tensor h,
     Tensor cache,
     Tensor act_uh, 
@@ -119,7 +115,6 @@ std::vector<Tensor> ligru_backward(
     CHECK_INPUT(h);
     CHECK_INPUT(cache);
     CHECK_INPUT(grad_out);
-    CHECK_INPUT(drop_mask);
     CHECK_INPUT(act_uh);
     CHECK_INPUT(act_uh_norm_cache);
 
@@ -167,8 +162,7 @@ std::vector<Tensor> ligru_backward(
           dwx.data_ptr<scalar_t>(),
           du.data_ptr<scalar_t>(),
           dh.data_ptr<scalar_t>(),
-          layer_norm1,
-          drop_mask.data_ptr<scalar_t>()
+          layer_norm1
         );
 
     }));

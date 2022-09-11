@@ -21,8 +21,7 @@ void PointwiseOperations(const int batch_dim,
                          const T* v,
                          T* dh_prev, 
                          const T* grad_out,
-                         T* dwx,
-                         const T* drop_mask) {  // Zoneout mask (only used if ApplyZoneout==true)
+                         T* dwx) {  // Zoneout mask (only used if ApplyZoneout==true)
   const int row = blockDim.x * blockIdx.x + threadIdx.x;
   const int col = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -63,8 +62,7 @@ void PointwiseOperations(const int batch_dim,
                          const half* v,
                          half* dh,
                          const half* dh_new,
-                         half* dwx,
-                         const half* drop_mask) {
+                         half* dwx) {
   device_assert_fail("FP16 is not supported on compute capability < 7.0.");
 }
 #endif
@@ -129,8 +127,7 @@ void BackwardPass<T>::IterateInternal(
     const T* v,
     const T* grad_out,
     T* dh,
-    T* dwx,
-    const T* drop_mask) 
+    T* dwx) 
 {
   const T alpha = static_cast<T>(1.0);
   const T beta_sum = static_cast<T>(1.0);
@@ -153,8 +150,7 @@ void BackwardPass<T>::IterateInternal(
       v,
       dh, 
       grad_out,
-      dwx,
-      drop_mask
+      dwx
   );
   cudaEventRecord(event, stream1);
 
@@ -181,8 +177,7 @@ void BackwardPass<T>::Run(
     const T* grad_out,
     T* dwx,
     T* du,
-    T* dh,
-    const T* drop_mask) {
+    T* dh) {
 
   const blas<void>::enable_tensor_cores scoped0(data_->blas_handle);
   const blas<void>::set_pointer_mode scoped1(data_->blas_handle);
@@ -192,10 +187,10 @@ void BackwardPass<T>::Run(
   // const T beta_assign = static_cast<T>(0.0);
 
   const int batch_size = data_->batch_size;
-  const int input_size = data_->input_size;
+  // const int input_size = data_->input_size;
   const int hidden_size = data_->hidden_size;
   const cublasHandle_t blas_handle = data_->blas_handle;
-  const cudaStream_t stream1 = data_->stream[0];
+  // const cudaStream_t stream1 = data_->stream[0];
   const cudaStream_t stream2 = data_->stream[1];
   const cudaEvent_t event = data_->event;
 
@@ -210,8 +205,7 @@ void BackwardPass<T>::Run(
         v + i * NH * 3,
         grad_out + (i + 1) * NH,
         dh,
-        dwx + i * NH * 2,
-        drop_mask);
+        dwx + i * NH * 2);
   }
 
   cudaStreamWaitEvent(stream2, event, 0);

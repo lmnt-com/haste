@@ -51,8 +51,7 @@ class ForwardPass {
         T* v,
         layer_norm::ForwardPass<T>& layer_norm1,
         T* tmp_uh_norm,
-        T* tmp_uh,
-        const T* drop_mask);
+        T* tmp_uh);
 
     // void Run(
     //     const int time_step,
@@ -72,8 +71,7 @@ class ForwardPass {
         T* tmp_wx,
         T* tmp_uh,
         T* tmp_uh_norm, 
-        layer_norm::ForwardPass<T>& layer_norm1, 
-        const T* drop_mask);
+        layer_norm::ForwardPass<T>& layer_norm1);
 
     struct private_data;
     private_data* data_;
@@ -109,8 +107,7 @@ class BackwardPass {
         T* dwx,
         T* du,
         T* dh,
-        layer_norm::BackwardPass<T>& layer_norm1,
-        const T* drop_mask);
+        layer_norm::BackwardPass<T>& layer_norm1);
 
   private:
     void IterateInternal(
@@ -121,8 +118,7 @@ class BackwardPass {
         T* dh,
         T* tmp_dwx,
         T* dwx,
-        layer_norm::BackwardPass<T>& layer_norm1,
-        const T* drop_mask);
+        layer_norm::BackwardPass<T>& layer_norm1);
 
     struct private_data;
     private_data* data_;

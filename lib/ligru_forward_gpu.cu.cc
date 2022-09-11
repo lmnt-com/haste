@@ -19,8 +19,7 @@ void PointwiseOperations(const int batch_dim,
                          const T* uh,
                          const T* h,
                          T* h_out,
-                         T* v,
-                         const T* drop_mask) {  
+                         T* v) {  
   const int row = blockDim.x * blockIdx.x + threadIdx.x;
   const int col = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -40,7 +39,7 @@ void PointwiseOperations(const int batch_dim,
   const T z = sigmoid(wx[z_idx] + uh[z_idx]);// + uh[z_idx] //wx[z_idx] + uh[z_idx]; // sigmoid(wx[z_idx] + uh[z_idx]);
   const T a = wx[a_idx] + uh[a_idx]; // + uh[a_idx] //+ uh[a_idx];
   
-  const T hcand = relu(a); // drop_mask[output_idx];
+  const T hcand = relu(a); 
 
   // Store internal activations if we're eventually going to backprop.
   if (Training) {
@@ -64,8 +63,7 @@ void PointwiseOperations(const int batch_dim,
                          const half* uh,
                          const half* h,
                          half* h_out,
-                         half* v,
-                         const half* drop_mask) {
+                         half* v) {
   device_assert_fail("FP16 is not supported on compute capability < 7.0.");
 }
 #endif
@@ -132,8 +130,7 @@ void ForwardPass<T>::IterateInternal(
     T* h_out,  
     T* v,      
     T* tmp_wx,  
-    T* tmp_uh,   
-    const T* drop_mask) {
+    T* tmp_uh) {
     static const T alpha = static_cast<T>(1.0);
     static const T beta = static_cast<T>(0.0);
 
@@ -171,8 +168,7 @@ void ForwardPass<T>::IterateInternal(
           tmp_uh,
           h,
           h_out,
-          v,
-          drop_mask);
+          v);
     }
     else {
         PointwiseOperations<T, false><<<gridDim, blockDim, 0, stream1>>>(
@@ -182,8 +178,7 @@ void ForwardPass<T>::IterateInternal(
           tmp_uh,
           h,
           h_out,
-          v,
-          drop_mask); 
+          v); 
     }
 }
 
@@ -195,8 +190,7 @@ void ForwardPass<T>::Run(
     const T* u,
     T* h,
     T* v,
-    T* tmp_uh,
-    const T* drop_mask) {
+    T* tmp_uh) {
     
     const int batch_size = data_->batch_size;
     const int hidden_size = data_->hidden_size;
@@ -212,8 +206,7 @@ void ForwardPass<T>::Run(
         h + (i + 1) * NH,  
         v + i * NH * 3,      
         wx + i * NH * 2,  
-        tmp_uh,   
-        drop_mask);
+        tmp_uh);
 
   }
 }

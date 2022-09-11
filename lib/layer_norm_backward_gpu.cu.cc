@@ -37,7 +37,7 @@ void LayerNormGrad(
   for (int i = index; i < hidden_size; i += stride) {
     const T cur_dy = dy[batch_idx + i];
     const T centered_x = x[batch_idx + i] - mean;
-    const T z = centered_x * invstd;
+    // const T z = centered_x * invstd;
 
     const T db = cur_dy;
     dsigma_tmp += centered_x * db;

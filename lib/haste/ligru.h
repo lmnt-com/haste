@@ -49,8 +49,7 @@ class ForwardPass {
         const T* u,
         T* h,
         T* v,
-        T* tmp_uh,
-        const T* drop_mask);
+        T* tmp_uh);
 
 
   private:
@@ -60,8 +59,7 @@ class ForwardPass {
         T* h_out,
         T* v,
         T* tmp_wx,
-        T* tmp_uh,
-        const T* drop_mask);
+        T* tmp_uh);
 
     struct private_data;
     private_data* data_;
@@ -95,8 +93,7 @@ class BackwardPass {
         const T* grad_out,
         T* dwx,
         T* du,
-        T* dh,
-        const T* drop_mask);
+        T* dh);
 
   private:
     void IterateInternal(
@@ -105,8 +102,7 @@ class BackwardPass {
         const T* v,
         const T* dh_new,
         T* dh,
-        T* dwx,
-        const T* drop_mask);
+        T* dwx);
 
     struct private_data;
     private_data* data_;

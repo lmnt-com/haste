@@ -1,3 +1,4 @@
+
 import torch
 import torch.nn as nn
 from torch import Tensor
@@ -8,14 +9,13 @@ import haste_pytorch_lib as LIB
 class ApplyLiGRUCell(torch.autograd.Function):
 
     @staticmethod
-    def forward(ctx, training, wx, u, h, drop_mask):
+    def forward(ctx, training, wx, u, h):
 
         output, cache, act_uh, act_uh_norm_cache, = LIB.ligru_2_0_forward(
             training, 
             wx.contiguous(),
             h.contiguous(),
             u.T.contiguous(),
-            drop_mask.contiguous()
 
         )
         ctx.save_for_backward(
@@ -25,7 +25,6 @@ class ApplyLiGRUCell(torch.autograd.Function):
             act_uh_norm_cache,
             wx, 
             u, 
-            drop_mask, 
             cache
         )
 
@@ -34,12 +33,11 @@ class ApplyLiGRUCell(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_out):
 
-        h, cache, act_uh, act_uh_norm_cache, wx, u, drop_mask, cache, = ctx.saved_tensors
+        h, cache, act_uh, act_uh_norm_cache, wx, u, cache, = ctx.saved_tensors
 
         du, dwx, tmp_dwx, = LIB.ligru_2_0_backward(
             wx.contiguous(),
             u.contiguous(),
-            drop_mask.contiguous(),
             h,
             cache, 
             act_uh,
@@ -121,37 +119,12 @@ class LiGRU(torch.nn.Module):
         self.dropout = dropout if dropout > 0 else None
         self.reshape = False
 
-<<<<<<< HEAD
-def apply_ligru_cell(x, w, u, h_init, drop_mask):
-    wx = x @ w.T 
-
-    ln = torch.nn.LayerNorm(u.size(0), elementwise_affine=False)
-    hiddens = []
-    ht = h_init
-    act = torch.nn.ReLU()
-    for k in range(wx.shape[1]):
-        gates = wx[:, k] + ln(ht @ u.T) 
-        at, zt = gates.chunk(2, 1)
-        zt = torch.sigmoid(zt)
-        hcand = act(at) * drop_mask
-        ht = zt * ht + (1 - zt) * hcand
-        hiddens.append(ht)
-
-    h = torch.stack(hiddens, dim=1)
-    return h 
-
-
-if __name__ == "__main__":
-    B, T, F, H = 5, 10, 5, 5
-    DTYPE = torch.double
-=======
         # Computing the feature dimensionality
         if len(input_shape) > 3:
             self.reshape = True
         self.fea_dim = float(torch.prod(torch.tensor(input_shape[2:])))
         self.batch_size = input_shape[0]
         self.rnn = self._init_layers()
->>>>>>> b85c97c85474fc3a57e2afce17a84c2aabe2fa95
 
         if self.re_init:
             rnn_init(self.rnn)
@@ -182,15 +155,6 @@ if __name__ == "__main__":
                 current_dim = self.hidden_size
         return rnn
 
-<<<<<<< HEAD
-    print("LiGRU 2.0 test: ")
-    # out = ApplyLiGRUCell.apply(True, wx, u_, h_init_, drop_mask_)
-    # out.permute(1, 0, 2).sum().backward()
-    # print(out.permute(1, 0, 2))    
-    print(torch.autograd.gradcheck(ApplyLiGRUCell.apply,
-     [True, wx, u_, h_init_, drop_mask_]
-    ))
-=======
     def forward(self, x, hx: Optional[Tensor] = None):
         """Returns the output of the liGRU.
         Arguments
@@ -204,7 +168,6 @@ if __name__ == "__main__":
         if self.reshape:
             if x.ndim == 4:
                 x = x.reshape(x.shape[0], x.shape[1], x.shape[2] * x.shape[3])
->>>>>>> b85c97c85474fc3a57e2afce17a84c2aabe2fa95
 
         # run ligru
         output, hh = self._forward_ligru(x, hx=hx)
@@ -397,8 +360,7 @@ class LiGRU_Layer(torch.nn.Module):
                 True, 
                 w, 
                 self.u.weight,
-                ht, 
-                torch.ones_like(ht)
+                ht
             )
 
             output = output.permute(1, 0, 2)
