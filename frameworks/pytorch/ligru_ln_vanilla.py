@@ -1,53 +1,9 @@
+
 import torch
 import torch.nn as nn
 from torch import Tensor
 from typing import Optional
-import haste_pytorch_lib as LIB
 
-
-class ApplyLiGRUCell(torch.autograd.Function):
-
-    @staticmethod
-    def forward(ctx, training, wx, u, h, drop_mask):
-
-        output, cache, act_uh, act_uh_norm_cache, = LIB.ligru_2_0_forward(
-            training, 
-            wx.contiguous(),
-            h.contiguous(),
-            u.T.contiguous(),
-            drop_mask.contiguous()
-
-        )
-        ctx.save_for_backward(
-            output, 
-            cache, 
-            act_uh, 
-            act_uh_norm_cache,
-            wx, 
-            u, 
-            drop_mask, 
-            cache
-        )
-
-        return output
-    
-    @staticmethod
-    def backward(ctx, grad_out):
-
-        h, cache, act_uh, act_uh_norm_cache, wx, u, drop_mask, cache, = ctx.saved_tensors
-
-        du, dwx, tmp_dwx, = LIB.ligru_2_0_backward(
-            wx.contiguous(),
-            u.contiguous(),
-            drop_mask.contiguous(),
-            h,
-            cache, 
-            act_uh,
-            act_uh_norm_cache,
-            grad_out.contiguous()
-        )
-        
-        return None, dwx, du.T, None, None, None 
 
 class LiGRU(torch.nn.Module):
     """ This function implements a Light GRU (liGRU).
@@ -106,7 +62,7 @@ class LiGRU(torch.nn.Module):
         normalization="batchnorm",
         num_layers=1,
         bias=True,
-        dropout=0,
+        dropout=0.0,
         re_init=True,
         bidirectional=False,
     ):
@@ -116,48 +72,20 @@ class LiGRU(torch.nn.Module):
         self.num_layers = num_layers
         self.normalization = normalization
         self.bias = bias
+        self.dropout = dropout
         self.re_init = re_init
         self.bidirectional = bidirectional
-        self.dropout = dropout if dropout > 0 else None
         self.reshape = False
 
-<<<<<<< HEAD
-def apply_ligru_cell(x, w, u, h_init, drop_mask):
-    wx = x @ w.T 
-
-    ln = torch.nn.LayerNorm(u.size(0), elementwise_affine=False)
-    hiddens = []
-    ht = h_init
-    act = torch.nn.ReLU()
-    for k in range(wx.shape[1]):
-        gates = wx[:, k] + ln(ht @ u.T) 
-        at, zt = gates.chunk(2, 1)
-        zt = torch.sigmoid(zt)
-        hcand = act(at) * drop_mask
-        ht = zt * ht + (1 - zt) * hcand
-        hiddens.append(ht)
-
-    h = torch.stack(hiddens, dim=1)
-    return h 
-
-
-if __name__ == "__main__":
-    B, T, F, H = 5, 10, 5, 5
-    DTYPE = torch.double
-=======
         # Computing the feature dimensionality
         if len(input_shape) > 3:
             self.reshape = True
         self.fea_dim = float(torch.prod(torch.tensor(input_shape[2:])))
         self.batch_size = input_shape[0]
         self.rnn = self._init_layers()
->>>>>>> b85c97c85474fc3a57e2afce17a84c2aabe2fa95
 
         if self.re_init:
             rnn_init(self.rnn)
-
-        if self.dropout:
-            self.dropout = torch.nn.Dropout(self.dropout)
 
     def _init_layers(self):
         """Initializes the layers of the liGRU."""
@@ -170,6 +98,7 @@ if __name__ == "__main__":
                 self.hidden_size,
                 self.num_layers,
                 self.batch_size,
+                dropout=self.dropout,
                 nonlinearity=self.nonlinearity,
                 normalization=self.normalization,
                 bidirectional=self.bidirectional,
@@ -182,15 +111,6 @@ if __name__ == "__main__":
                 current_dim = self.hidden_size
         return rnn
 
-<<<<<<< HEAD
-    print("LiGRU 2.0 test: ")
-    # out = ApplyLiGRUCell.apply(True, wx, u_, h_init_, drop_mask_)
-    # out.permute(1, 0, 2).sum().backward()
-    # print(out.permute(1, 0, 2))    
-    print(torch.autograd.gradcheck(ApplyLiGRUCell.apply,
-     [True, wx, u_, h_init_, drop_mask_]
-    ))
-=======
     def forward(self, x, hx: Optional[Tensor] = None):
         """Returns the output of the liGRU.
         Arguments
@@ -204,7 +124,6 @@ if __name__ == "__main__":
         if self.reshape:
             if x.ndim == 4:
                 x = x.reshape(x.shape[0], x.shape[1], x.shape[2] * x.shape[3])
->>>>>>> b85c97c85474fc3a57e2afce17a84c2aabe2fa95
 
         # run ligru
         output, hh = self._forward_ligru(x, hx=hx)
@@ -221,23 +140,16 @@ if __name__ == "__main__":
         """
         h = []
         if hx is not None:
-            
             if self.bidirectional:
                 hx = hx.reshape(
                     self.num_layers, self.batch_size * 2, self.hidden_size
                 )
-            
-
         # Processing the different layers
         for i, ligru_lay in enumerate(self.rnn):
             if hx is not None:
                 x = ligru_lay(x, hx=hx[i])
             else:
                 x = ligru_lay(x, hx=None)
-
-            if self.dropout and i < len(self.rnn) - 1:
-                x = self.dropout(x)
-
             h.append(x[:, -1, :])
         h = torch.stack(h, dim=1)
 
@@ -280,6 +192,7 @@ class LiGRU_Layer(torch.nn.Module):
         hidden_size,
         num_layers,
         batch_size,
+        dropout=0.0,
         nonlinearity="relu",
         normalization="batchnorm",
         bidirectional=False,
@@ -290,11 +203,15 @@ class LiGRU_Layer(torch.nn.Module):
         self.input_size = int(input_size)
         self.batch_size = batch_size
         self.bidirectional = bidirectional
+        self.dropout = dropout
 
         self.w = nn.Linear(self.input_size, 2 * self.hidden_size, bias=False)
 
         self.u = nn.Linear(self.hidden_size, 2 * self.hidden_size, bias=False)
-        
+
+        self.norm_hidden = nn.LayerNorm(2 * self.hidden_size, elementwise_affine=False)
+
+
         if self.bidirectional:
             self.batch_size = self.batch_size * 2
 
@@ -316,6 +233,9 @@ class LiGRU_Layer(torch.nn.Module):
 
         # Initial state
         self.register_buffer("h_init", torch.zeros(1, self.hidden_size))
+
+        # Preloading dropout masks (gives some speed improvement)
+        self._init_drop(self.batch_size)
 
         # Setting the activation function
         if nonlinearity == "tanh":
@@ -339,6 +259,9 @@ class LiGRU_Layer(torch.nn.Module):
             x_flip = x.flip(1)
             x = torch.cat([x, x_flip], dim=0)
 
+        # Change batch size if needed
+        self._change_batch_size(x)
+
         # Feed-forward affine transformations (all steps in parallel)
         w = self.w(x)
 
@@ -360,7 +283,7 @@ class LiGRU_Layer(torch.nn.Module):
 
         return h
 
-    def _ligru_cell_cpu(self, w, ht):
+    def _ligru_cell(self, w, ht):
         """Returns the hidden states for each time step.
         Arguments
         ---------
@@ -369,12 +292,16 @@ class LiGRU_Layer(torch.nn.Module):
         """
         hiddens = []
 
+        # Sampling dropout mask
+        drop_mask = self._sample_drop_mask(w)
+        
+        print("ht = ", ht.shape)
         # Loop over time axis
         for k in range(w.shape[1]):
-            gates = w[:, k] + self.u(ht)
+            gates = w[:, k] + self.norm_hidden(self.u(ht))
             at, zt = gates.chunk(2, 1)
             zt = torch.sigmoid(zt)
-            hcand = self.act(at)
+            hcand = self.act(at) * drop_mask
             ht = zt * ht + (1 - zt) * hcand
             hiddens.append(ht)
 
@@ -382,30 +309,60 @@ class LiGRU_Layer(torch.nn.Module):
         h = torch.stack(hiddens, dim=1)
         return h
 
-    def _ligru_cell(self, w, ht):
-        """Returns the hidden states for each time step.
-        Arguments
-        ---------
-        wx : torch.Tensor
-            Linearly transformed input.
+    def _init_drop(self, batch_size):
+        """Initializes the recurrent dropout operation. To speed it up,
+        the dropout masks are sampled in advance.
         """
+        self.drop = torch.nn.Dropout(p=self.dropout, inplace=False)
+        self.N_drop_masks = 16000
+        self.drop_mask_cnt = 0
 
-        if w.is_cuda:
-            w = w.permute(1, 0, 2)
+        self.register_buffer(
+            "drop_masks",
+            self.drop(torch.ones(self.N_drop_masks, self.hidden_size)).data,
+        )
+        self.register_buffer("drop_mask_te", torch.tensor([1.0]).float())
 
-            output = ApplyLiGRUCell.apply(
-                True, 
-                w, 
-                self.u.weight,
-                ht, 
-                torch.ones_like(ht)
-            )
+    def _sample_drop_mask(self, w):
+        """Selects one of the pre-defined dropout masks"""
+        if self.training:
 
-            output = output.permute(1, 0, 2)
+            # Sample new masks when needed
+            if self.drop_mask_cnt + self.batch_size > self.N_drop_masks:
+                self.drop_mask_cnt = 0
+                self.drop_masks = self.drop(
+                    torch.ones(
+                        self.N_drop_masks, self.hidden_size, device=w.device
+                    )
+                ).data
 
-            return output[:, 1:]
+            # Sampling the mask
+            drop_mask = self.drop_masks[
+                self.drop_mask_cnt : self.drop_mask_cnt + self.batch_size
+            ]
+            self.drop_mask_cnt = self.drop_mask_cnt + self.batch_size
+
         else:
-            return self._ligru_cell_cpu(w, ht)
+            self.drop_mask_te = self.drop_mask_te.to(w.device)
+            drop_mask = self.drop_mask_te
+
+        return drop_mask
+
+    def _change_batch_size(self, x):
+        """This function changes the batch size when it is different from
+        the one detected in the initialization method. This might happen in
+        the case of multi-gpu or when we have different batch sizes in train
+        and test. We also update the h_int and drop masks.
+        """
+        if self.batch_size != x.shape[0]:
+            self.batch_size = x.shape[0]
+
+            if self.training:
+                self.drop_masks = self.drop(
+                    torch.ones(
+                        self.N_drop_masks, self.hidden_size, device=x.device,
+                    )
+                ).data
 
 def rnn_init(module):
     """This function is used to initialize the RNN weight.
@@ -428,10 +385,10 @@ def rnn_init(module):
 
 if __name__ == "__main__" :
     torch.manual_seed(42)
-    print("LIGRU LN HASTE")
+    print("LIGRU LN Vanilla")
     import time 
     inp_tensor = torch.rand([1, 5, 2], requires_grad=False).to("cuda")
-    net = LiGRU(input_shape=inp_tensor.shape, hidden_size=2, num_layers=2, dropout=0.50).to("cuda")
+    net = LiGRU(input_shape=inp_tensor.shape, hidden_size=2, num_layers=2).to("cuda")
 
     torch.cuda.synchronize()
     time1 = time.time()
