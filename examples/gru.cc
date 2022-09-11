@@ -29,8 +29,8 @@
 #include "device_ptr.h"
 #include "haste.h"
 
-using haste::v0::gru::ForwardPass;
 using haste::v0::gru::BackwardPass;
+using haste::v0::gru::ForwardPass;
 using std::string;
 
 using Tensor1 = Eigen::Tensor<float, 1>;
@@ -45,35 +45,31 @@ constexpr int INPUT_DIMS = 512;
 static cublasHandle_t g_blas_handle;
 
 class ScopeTimer {
-  public:
-    ScopeTimer(const string& msg) : msg_(msg) {
-      cudaEventCreate(&start_);
-      cudaEventCreate(&stop_);
-      cudaDeviceSynchronize();
-      cudaEventRecord(start_);
-    }
+public:
+  ScopeTimer(const string &msg) : msg_(msg) {
+    cudaEventCreate(&start_);
+    cudaEventCreate(&stop_);
+    cudaDeviceSynchronize();
+    cudaEventRecord(start_);
+  }
 
-    ~ScopeTimer() {
-      float elapsed_ms;
-      cudaEventRecord(stop_);
-      cudaEventSynchronize(stop_);
-      cudaEventElapsedTime(&elapsed_ms, start_, stop_);
-      printf("%s %fms\n", msg_.c_str(), elapsed_ms);
-      cudaEventDestroy(start_);
-      cudaEventDestroy(stop_);
-    }
+  ~ScopeTimer() {
+    float elapsed_ms;
+    cudaEventRecord(stop_);
+    cudaEventSynchronize(stop_);
+    cudaEventElapsedTime(&elapsed_ms, start_, stop_);
+    printf("%s %fms\n", msg_.c_str(), elapsed_ms);
+    cudaEventDestroy(start_);
+    cudaEventDestroy(stop_);
+  }
 
-  private:
-    string msg_;
-    cudaEvent_t start_, stop_;
+private:
+  string msg_;
+  cudaEvent_t start_, stop_;
 };
 
-void GruInference(
-    const Tensor2& W,
-    const Tensor2& R,
-    const Tensor1& bx,
-    const Tensor1& br,
-    const Tensor3& x) {
+void GruInference(const Tensor2 &W, const Tensor2 &R, const Tensor1 &bx,
+                  const Tensor1 &br, const Tensor3 &x) {
   const int time_steps = x.dimension(2);
   const int batch_size = x.dimension(1);
   const int input_size = x.dimension(0);
@@ -94,35 +90,17 @@ void GruInference(
 
   ScopeTimer t("Inference:");
 
-  ForwardPass<float> forward = ForwardPass<float>(
-      false,  // training
-      batch_size,
-      input_size,
-      hidden_size,
-      g_blas_handle);
+  ForwardPass<float> forward =
+      ForwardPass<float>(false, // training
+                         batch_size, input_size, hidden_size, g_blas_handle);
 
-  forward.Run(
-      time_steps,
-      W_dev.data,
-      R_dev.data,
-      bx_dev.data,
-      br_dev.data,
-      x_dev.data,
-      h_dev.data,
-      nullptr,
-      tmp_Wx_dev.data,
-      tmp_Rh_dev.data,
-      0.0f,
-      nullptr);
+  forward.Run(time_steps, W_dev.data, R_dev.data, bx_dev.data, br_dev.data,
+              x_dev.data, h_dev.data, nullptr, tmp_Wx_dev.data, tmp_Rh_dev.data,
+              0.0f, nullptr);
 }
 
-void GruTrain(
-    const Tensor2& W,
-    const Tensor2& R,
-    const Tensor1& bx,
-    const Tensor1& br,
-    const Tensor3& x,
-    const Tensor3& dh_new) {
+void GruTrain(const Tensor2 &W, const Tensor2 &R, const Tensor1 &bx,
+              const Tensor1 &br, const Tensor3 &x, const Tensor3 &dh_new) {
   const int time_steps = x.dimension(2);
   const int batch_size = x.dimension(1);
   const int input_size = x.dimension(0);
@@ -145,26 +123,13 @@ void GruTrain(
 
   {
     ScopeTimer t("Train forward:");
-    ForwardPass<float> forward = ForwardPass<float>(
-        true,  // training
-        batch_size,
-        input_size,
-        hidden_size,
-        g_blas_handle);
+    ForwardPass<float> forward =
+        ForwardPass<float>(true, // training
+                           batch_size, input_size, hidden_size, g_blas_handle);
 
-    forward.Run(
-        time_steps,
-        W_dev.data,
-        R_dev.data,
-        bx_dev.data,
-        br_dev.data,
-        x_dev.data,
-        h_dev.data,
-        v_dev.data,
-        tmp_Wx_dev.data,
-        tmp_Rh_dev.data,
-        0.0f,
-        nullptr);
+    forward.Run(time_steps, W_dev.data, R_dev.data, bx_dev.data, br_dev.data,
+                x_dev.data, h_dev.data, v_dev.data, tmp_Wx_dev.data,
+                tmp_Rh_dev.data, 0.0f, nullptr);
   }
 
   device_ptr<Tensor3> dx_dev(time_steps * batch_size * input_size);
@@ -178,31 +143,13 @@ void GruTrain(
 
   {
     ScopeTimer t("Train backward:");
-    BackwardPass<float> backward(
-        batch_size,
-        input_size,
-        hidden_size,
-        g_blas_handle);
+    BackwardPass<float> backward(batch_size, input_size, hidden_size,
+                                 g_blas_handle);
 
-    backward.Run(
-        time_steps,
-        W_dev.data,
-        R_dev.data,
-        bx_dev.data,
-        br_dev.data,
-        x_dev.data,
-        h_dev.data,
-        v_dev.data,
-        dh_new_dev.data,
-        dx_dev.data,
-        dW_dev.data,
-        dR_dev.data,
-        dbx_dev.data,
-        dbr_dev.data,
-        dh_dev.data,
-        dp_dev.data,
-        dq_dev.data,
-        nullptr);
+    backward.Run(time_steps, W_dev.data, R_dev.data, bx_dev.data, br_dev.data,
+                 x_dev.data, h_dev.data, v_dev.data, dh_new_dev.data,
+                 dx_dev.data, dW_dev.data, dR_dev.data, dbx_dev.data,
+                 dbr_dev.data, dh_dev.data, dp_dev.data, dq_dev.data, nullptr);
   }
 }
 

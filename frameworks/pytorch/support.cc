@@ -16,8 +16,8 @@
 #include <torch/extension.h>
 
 // void gru_init(py::module&);
-void ligru_init(py::module&);
-void ligru_2_0_init(py::module&);
+void ligru_init(py::module &);
+void ligru_2_0_init(py::module &);
 // void indrnn_init(py::module&);
 // void lstm_init(py::module&);
 // void layer_norm_gru_init(py::module&);

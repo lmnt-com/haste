@@ -36,21 +36,21 @@ namespace layer_norm_lstm = haste::v0::layer_norm_lstm;
 
 // Define the interface and shape function for the op.
 REGISTER_OP("HasteLayerNormLstm")
-    .Attr("R: {float, double}")         // Some real number type.
+    .Attr("R: {float, double}") // Some real number type.
     .Attr("training: bool")
     .Attr("zoneout_prob: float")
-    .Input("x: R")                      // [T,N,C]
-    .Input("kernel: R")                 // [C,H*4]
-    .Input("recurrent_kernel: R")       // [H,H*4]
-    .Input("bias: R")                   // [H*4]
+    .Input("x: R")                // [T,N,C]
+    .Input("kernel: R")           // [C,H*4]
+    .Input("recurrent_kernel: R") // [H,H*4]
+    .Input("bias: R")             // [H*4]
     .Input("gamma: R")
     .Input("gamma_h: R")
     .Input("beta_h: R")
-    .Input("zoneout_mask: R")           // [T,N,H]
-    .Output("h: R")                     // [T,N,H]
-    .Output("c: R")                     // [T,N,H]
-    .Output("cache: R")                 // [?] (activations cache)
-    .SetShapeFn([](InferenceContext* c) {
+    .Input("zoneout_mask: R") // [T,N,H]
+    .Output("h: R")           // [T,N,H]
+    .Output("c: R")           // [T,N,H]
+    .Output("cache: R")       // [?] (activations cache)
+    .SetShapeFn([](InferenceContext *c) {
       ShapeHandle input_shape;
       ShapeHandle kernel_shape;
       ShapeHandle recurrent_shape;
@@ -76,31 +76,33 @@ REGISTER_OP("HasteLayerNormLstm")
 
       TF_RETURN_IF_ERROR(c->Add(time_steps, 1, &time_steps_plus_1));
 
-      c->set_output(0, c->MakeShape({ time_steps_plus_1, batch_size, hidden_size }));
-      c->set_output(1, c->MakeShape({ time_steps_plus_1, batch_size, hidden_size }));
+      c->set_output(0,
+                    c->MakeShape({time_steps_plus_1, batch_size, hidden_size}));
+      c->set_output(1,
+                    c->MakeShape({time_steps_plus_1, batch_size, hidden_size}));
       c->set_output(2, c->UnknownShapeOfRank(1));
       return Status::OK();
     });
 
-template<typename T>
-struct HasteLayerNormLstmOp : public OpKernel {
-  explicit HasteLayerNormLstmOp(OpKernelConstruction* context) : OpKernel(context) {
+template <typename T> struct HasteLayerNormLstmOp : public OpKernel {
+  explicit HasteLayerNormLstmOp(OpKernelConstruction *context)
+      : OpKernel(context) {
     OP_REQUIRES_OK(context, context->GetAttr("training", &training_));
     OP_REQUIRES_OK(context, context->GetAttr("zoneout_prob", &zoneout_prob_));
   }
 
   // When running on GPU, TF backs all inputs and outputs with device memory
-  // and not host memory. We don't need to do explicit memory copies or allocations
-  // for the inputs and outputs.
-  void Compute(OpKernelContext* context) override {
-    const Tensor& input = context->input(0);
-    const Tensor& kernel = context->input(1);
-    const Tensor& recurrent_kernel = context->input(2);
-    const Tensor& bias = context->input(3);
-    const Tensor& gamma = context->input(4);
-    const Tensor& gamma_h = context->input(5);
-    const Tensor& beta_h = context->input(6);
-    const Tensor& zoneout_mask = context->input(7);
+  // and not host memory. We don't need to do explicit memory copies or
+  // allocations for the inputs and outputs.
+  void Compute(OpKernelContext *context) override {
+    const Tensor &input = context->input(0);
+    const Tensor &kernel = context->input(1);
+    const Tensor &recurrent_kernel = context->input(2);
+    const Tensor &bias = context->input(3);
+    const Tensor &gamma = context->input(4);
+    const Tensor &gamma_h = context->input(5);
+    const Tensor &beta_h = context->input(6);
+    const Tensor &zoneout_mask = context->input(7);
 
     const auto time_steps = input.shape().dim_size(0);
     const auto batch_size = input.shape().dim_size(1);
@@ -110,31 +112,36 @@ struct HasteLayerNormLstmOp : public OpKernel {
     const auto data_type = DataTypeToEnum<T>::value;
 
     OP_REQUIRES(context, input_size == kernel.shape().dim_size(0),
-        errors::InvalidArgument("input[2] and kernel[0] dimensions must match. Found ",
-            input_size, " and ", kernel.shape().dim_size(0)));
+                errors::InvalidArgument(
+                    "input[2] and kernel[0] dimensions must match. Found ",
+                    input_size, " and ", kernel.shape().dim_size(0)));
 
-    const TensorShape output_shape = { time_steps + 1, batch_size, hidden_size };
-    const TensorShape activations_shape = { time_steps, batch_size, hidden_size * 4 };
-    const TensorShape norm_cache_shape = { time_steps, batch_size, 2 };
+    const TensorShape output_shape = {time_steps + 1, batch_size, hidden_size};
+    const TensorShape activations_shape = {time_steps, batch_size,
+                                           hidden_size * 4};
+    const TensorShape norm_cache_shape = {time_steps, batch_size, 2};
 
-    Tensor* output = nullptr;
+    Tensor *output = nullptr;
     OP_REQUIRES_OK(context, context->allocate_output(0, output_shape, &output));
 
-    Tensor* output_cell_state = nullptr;
-    OP_REQUIRES_OK(context, context->allocate_output(1, output_shape, &output_cell_state));
+    Tensor *output_cell_state = nullptr;
+    OP_REQUIRES_OK(
+        context, context->allocate_output(1, output_shape, &output_cell_state));
 
     const ArenaLayout<T> memory_layout = {
-      { "act_Wx", activations_shape },
-      { "act_Wx_norm", activations_shape },
-      { "act_Wx_norm_cache", norm_cache_shape },
-      { "act_Rh", activations_shape },
-      { "act_Rh_norm_cache", norm_cache_shape },
-      { "act_c_norm", { time_steps, batch_size, hidden_size } },
-      { "act_c_norm_cache", norm_cache_shape },
+        {"act_Wx", activations_shape},
+        {"act_Wx_norm", activations_shape},
+        {"act_Wx_norm_cache", norm_cache_shape},
+        {"act_Rh", activations_shape},
+        {"act_Rh_norm_cache", norm_cache_shape},
+        {"act_c_norm", {time_steps, batch_size, hidden_size}},
+        {"act_c_norm_cache", norm_cache_shape},
     };
 
-    Tensor* output_cache = nullptr;
-    OP_REQUIRES_OK(context, context->allocate_output(2, { memory_layout.NumElements() }, &output_cache));
+    Tensor *output_cache = nullptr;
+    OP_REQUIRES_OK(context,
+                   context->allocate_output(2, {memory_layout.NumElements()},
+                                            &output_cache));
 
     Arena<T> memory = memory_layout.Realize(output_cache->flat<T>().data());
     TensorView<T> act_Wx = memory["act_Wx"];
@@ -146,63 +153,44 @@ struct HasteLayerNormLstmOp : public OpKernel {
     TensorView<T> act_c_norm_cache = memory["act_c_norm_cache"];
 
     Tensor tmp_Rh;
-    const TensorShape tmp_Rh_shape = { batch_size, 4 * hidden_size };
-    OP_REQUIRES_OK(context, context->allocate_temp(data_type, tmp_Rh_shape, &tmp_Rh));
+    const TensorShape tmp_Rh_shape = {batch_size, 4 * hidden_size};
+    OP_REQUIRES_OK(context,
+                   context->allocate_temp(data_type, tmp_Rh_shape, &tmp_Rh));
 
     cudaMemset(output->flat<T>().data(), 0, output->AllocatedBytes());
-    cudaMemset(output_cell_state->flat<T>().data(), 0, output_cell_state->AllocatedBytes());
+    cudaMemset(output_cell_state->flat<T>().data(), 0,
+               output_cell_state->AllocatedBytes());
 
     layer_norm::ForwardPass<T> layer_norm1(
-        time_steps * batch_size,
-        hidden_size * 4,
-        gamma.SubSlice(0).unaligned_flat<T>().data(),
-        nullptr,
+        time_steps * batch_size, hidden_size * 4,
+        gamma.SubSlice(0).unaligned_flat<T>().data(), nullptr,
         act_Wx_norm_cache.data());
 
     layer_norm::ForwardPass<T> layer_norm2(
-        time_steps * batch_size,
-        hidden_size * 4,
-        gamma.SubSlice(1).unaligned_flat<T>().data(),
-        nullptr,
+        time_steps * batch_size, hidden_size * 4,
+        gamma.SubSlice(1).unaligned_flat<T>().data(), nullptr,
         act_Rh_norm_cache.data());
 
     layer_norm::ForwardPass<T> layer_norm3(
-        time_steps * batch_size,
-        hidden_size,
-        gamma_h.flat<T>().data(),
-        beta_h.flat<T>().data(),
-        act_c_norm_cache.data());
+        time_steps * batch_size, hidden_size, gamma_h.flat<T>().data(),
+        beta_h.flat<T>().data(), act_c_norm_cache.data());
 
-    layer_norm_lstm::ForwardPass<T> lstm(
-        training_,
-        batch_size,
-        input_size,
-        hidden_size,
-        GetCublasHandle(context));
+    layer_norm_lstm::ForwardPass<T> lstm(training_, batch_size, input_size,
+                                         hidden_size, GetCublasHandle(context));
 
-    lstm.Run(
-        time_steps,
-        kernel.flat<T>().data(),
-        recurrent_kernel.flat<T>().data(),
-        bias.flat<T>().data(),
-        input.flat<T>().data(),
-        output->flat<T>().data(),
-        output_cell_state->flat<T>().data(),
-        act_Wx.data(),
-        tmp_Rh.flat<T>().data(),
-        layer_norm1,
-        act_Wx_norm.data(),
-        act_Rh.data(),
-        layer_norm2,
-        layer_norm3,
-        act_c_norm.data(),
-        has_zoneout ? zoneout_prob_ : 0.0f,
-        has_zoneout ? zoneout_mask.flat<T>().data() : nullptr);
+    lstm.Run(time_steps, kernel.flat<T>().data(),
+             recurrent_kernel.flat<T>().data(), bias.flat<T>().data(),
+             input.flat<T>().data(), output->flat<T>().data(),
+             output_cell_state->flat<T>().data(), act_Wx.data(),
+             tmp_Rh.flat<T>().data(), layer_norm1, act_Wx_norm.data(),
+             act_Rh.data(), layer_norm2, layer_norm3, act_c_norm.data(),
+             has_zoneout ? zoneout_prob_ : 0.0f,
+             has_zoneout ? zoneout_mask.flat<T>().data() : nullptr);
   }
 
-  private:
-    bool training_;
-    float zoneout_prob_;
+private:
+  bool training_;
+  float zoneout_prob_;
 };
 
 REGISTER_GPU_KERNEL(HasteLayerNormLstm, float);
@@ -210,27 +198,27 @@ REGISTER_GPU_KERNEL(HasteLayerNormLstm, double);
 
 REGISTER_OP("HasteLayerNormLstmGrad")
     .Attr("R: {float, double}")
-    .Input("x_t: R")                   // [C,N,T]
-    .Input("kernel_t: R")              // [H*4,C]
-    .Input("recurrent_kernel_t: R")    // [H*4,H]
-    .Input("bias: R")                  // [H*4]
+    .Input("x_t: R")                // [C,N,T]
+    .Input("kernel_t: R")           // [H*4,C]
+    .Input("recurrent_kernel_t: R") // [H*4,H]
+    .Input("bias: R")               // [H*4]
     .Input("gamma: R")
     .Input("gamma_h: R")
     .Input("beta_h: R")
-    .Input("h: R")                     // [T,N,H]
-    .Input("c: R")                     // [T,N,H]
+    .Input("h: R") // [T,N,H]
+    .Input("c: R") // [T,N,H]
     .Input("cache: R")
-    .Input("dh_new: R")                // [T,N,H]
-    .Input("dc_new: R")                // [T,N,H]
-    .Input("zoneout_mask: R")          // [T,N,H]
-    .Output("dx: R")                   // [T,N,C]
-    .Output("dw: R")                   // [C,H*4]
-    .Output("dr: R")                   // [H,H*4]
-    .Output("db: R")                   // [H*4]
+    .Input("dh_new: R")       // [T,N,H]
+    .Input("dc_new: R")       // [T,N,H]
+    .Input("zoneout_mask: R") // [T,N,H]
+    .Output("dx: R")          // [T,N,C]
+    .Output("dw: R")          // [C,H*4]
+    .Output("dr: R")          // [H,H*4]
+    .Output("db: R")          // [H*4]
     .Output("dgamma: R")
     .Output("dgamma_h: R")
     .Output("dbeta_h: R")
-    .SetShapeFn([](InferenceContext* c) {
+    .SetShapeFn([](InferenceContext *c) {
       ShapeHandle x_shape;
       ShapeHandle kernel_shape;
       ShapeHandle recurrent_kernel_shape;
@@ -267,9 +255,9 @@ REGISTER_OP("HasteLayerNormLstmGrad")
 
       TF_RETURN_IF_ERROR(c->Multiply(hidden_size, 4, &hidden_size_4));
 
-      c->set_output(0, c->MakeShape({ time_steps, batch_size, input_size }));
-      c->set_output(1, c->MakeShape({ input_size, hidden_size_4 }));
-      c->set_output(2, c->MakeShape({ hidden_size, hidden_size_4 }));
+      c->set_output(0, c->MakeShape({time_steps, batch_size, input_size}));
+      c->set_output(1, c->MakeShape({input_size, hidden_size_4}));
+      c->set_output(2, c->MakeShape({hidden_size, hidden_size_4}));
       c->set_output(3, bias_shape);
       c->set_output(4, gamma_shape);
       c->set_output(5, gamma_h_shape);
@@ -277,24 +265,24 @@ REGISTER_OP("HasteLayerNormLstmGrad")
       return Status::OK();
     });
 
-template<typename T>
-struct HasteLayerNormLstmGradOp : public OpKernel {
-  explicit HasteLayerNormLstmGradOp(OpKernelConstruction* context) : OpKernel(context) {}
+template <typename T> struct HasteLayerNormLstmGradOp : public OpKernel {
+  explicit HasteLayerNormLstmGradOp(OpKernelConstruction *context)
+      : OpKernel(context) {}
 
-  void Compute(OpKernelContext* context) override {
-    const Tensor& input = context->input(0);
-    const Tensor& kernel = context->input(1);
-    const Tensor& recurrent_kernel = context->input(2);
-    const Tensor& bias = context->input(3);
-    const Tensor& gamma = context->input(4);
-    const Tensor& gamma_h = context->input(5);
-    const Tensor& beta_h = context->input(6);
-    const Tensor& h_vector = context->input(7);
-    const Tensor& c_vector = context->input(8);
-    const Tensor& cache_input = context->input(9);
-    const Tensor& dh_new = context->input(10);
-    const Tensor& dc_new = context->input(11);
-    const Tensor& zoneout_mask = context->input(12);
+  void Compute(OpKernelContext *context) override {
+    const Tensor &input = context->input(0);
+    const Tensor &kernel = context->input(1);
+    const Tensor &recurrent_kernel = context->input(2);
+    const Tensor &bias = context->input(3);
+    const Tensor &gamma = context->input(4);
+    const Tensor &gamma_h = context->input(5);
+    const Tensor &beta_h = context->input(6);
+    const Tensor &h_vector = context->input(7);
+    const Tensor &c_vector = context->input(8);
+    const Tensor &cache_input = context->input(9);
+    const Tensor &dh_new = context->input(10);
+    const Tensor &dc_new = context->input(11);
+    const Tensor &zoneout_mask = context->input(12);
 
     const auto input_size = input.shape().dim_size(0);
     const auto time_steps = input.shape().dim_size(1);
@@ -304,62 +292,67 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
     const auto data_type = DataTypeToEnum<T>::value;
 
     // Can be uninitialized. Output only, no accumulation.
-    const TensorShape dx_shape = { time_steps, batch_size, input_size };
-    Tensor* dx = nullptr;
+    const TensorShape dx_shape = {time_steps, batch_size, input_size};
+    Tensor *dx = nullptr;
     OP_REQUIRES_OK(context, context->allocate_output(0, dx_shape, &dx));
 
     // Needs to be initialized to 0.
-    const TensorShape dW_shape = { input_size, hidden_size * 4 };
-    Tensor* dW = nullptr;
+    const TensorShape dW_shape = {input_size, hidden_size * 4};
+    Tensor *dW = nullptr;
     OP_REQUIRES_OK(context, context->allocate_output(1, dW_shape, &dW));
 
     // Needs to be initialized to 0.
-    const TensorShape dR_shape = { hidden_size, hidden_size * 4 };
-    Tensor* dR = nullptr;
+    const TensorShape dR_shape = {hidden_size, hidden_size * 4};
+    Tensor *dR = nullptr;
     OP_REQUIRES_OK(context, context->allocate_output(2, dR_shape, &dR));
 
     // Needs to be initialized to 0.
-    const TensorShape db_shape = { hidden_size * 4 };
-    Tensor* db = nullptr;
+    const TensorShape db_shape = {hidden_size * 4};
+    Tensor *db = nullptr;
     OP_REQUIRES_OK(context, context->allocate_output(3, db_shape, &db));
 
     // Needs to be initialized to 0.
-    Tensor* dgamma = nullptr;
-    OP_REQUIRES_OK(context, context->allocate_output(4, gamma.shape(), &dgamma));
+    Tensor *dgamma = nullptr;
+    OP_REQUIRES_OK(context,
+                   context->allocate_output(4, gamma.shape(), &dgamma));
 
     // Needs to be initialized to 0.
-    Tensor* dgamma_h = nullptr;
-    OP_REQUIRES_OK(context, context->allocate_output(5, gamma_h.shape(), &dgamma_h));
+    Tensor *dgamma_h = nullptr;
+    OP_REQUIRES_OK(context,
+                   context->allocate_output(5, gamma_h.shape(), &dgamma_h));
 
     // Needs to be initialized to 0.
-    Tensor* dbeta_h = nullptr;
-    OP_REQUIRES_OK(context, context->allocate_output(6, beta_h.shape(), &dbeta_h));
+    Tensor *dbeta_h = nullptr;
+    OP_REQUIRES_OK(context,
+                   context->allocate_output(6, beta_h.shape(), &dbeta_h));
 
     // Needs to be initialized to 0.
-    const TensorShape dh_shape = { batch_size, hidden_size };
+    const TensorShape dh_shape = {batch_size, hidden_size};
     Tensor dh;
     OP_REQUIRES_OK(context, context->allocate_temp(data_type, dh_shape, &dh));
 
     // Needs to be initialized to 0.
-    const TensorShape dc_shape = { batch_size, hidden_size };
+    const TensorShape dc_shape = {batch_size, hidden_size};
     Tensor dc;
     OP_REQUIRES_OK(context, context->allocate_temp(data_type, dc_shape, &dc));
 
-    const TensorShape activations_shape = { time_steps, batch_size, hidden_size * 4 };
-    const TensorShape norm_cache_shape = { time_steps, batch_size, 2 };
+    const TensorShape activations_shape = {time_steps, batch_size,
+                                           hidden_size * 4};
+    const TensorShape norm_cache_shape = {time_steps, batch_size, 2};
     const ArenaLayout<T> memory_layout = {
-      { "act_Wx", activations_shape },
-      { "act_Wx_norm", activations_shape },
-      { "act_Wx_norm_cache", norm_cache_shape },
-      { "act_Rh", activations_shape },
-      { "act_Rh_norm_cache", norm_cache_shape },
-      { "act_c_norm", { time_steps, batch_size, hidden_size } },
-      { "act_c_norm_cache", norm_cache_shape },
+        {"act_Wx", activations_shape},
+        {"act_Wx_norm", activations_shape},
+        {"act_Wx_norm_cache", norm_cache_shape},
+        {"act_Rh", activations_shape},
+        {"act_Rh_norm_cache", norm_cache_shape},
+        {"act_c_norm", {time_steps, batch_size, hidden_size}},
+        {"act_c_norm_cache", norm_cache_shape},
     };
 
     assert(cache_input.shape().num_elements() == memory_layout.NumElements());
 
-    Arena<T> memory = memory_layout.Realize(const_cast<T*>(cache_input.flat<T>().data()));
+    Arena<T> memory =
+        memory_layout.Realize(const_cast<T *>(cache_input.flat<T>().data()));
     TensorView<T> act_Wx = memory["act_Wx"];
     TensorView<T> act_Wx_norm = memory["act_Wx_norm"];
     TensorView<T> act_Wx_norm_cache = memory["act_Wx_norm_cache"];
@@ -378,65 +371,37 @@ struct HasteLayerNormLstmGradOp : public OpKernel {
     cudaMemset(dc.flat<T>().data(), 0, dc.AllocatedBytes());
 
     layer_norm::BackwardPass<T> layer_norm1(
-        time_steps * batch_size,
-        hidden_size * 4,
-        gamma.SubSlice(0).unaligned_flat<T>().data(),
-        nullptr,
-        act_Wx.data(),
-        dgamma->SubSlice(0).unaligned_flat<T>().data(),
-        nullptr,
+        time_steps * batch_size, hidden_size * 4,
+        gamma.SubSlice(0).unaligned_flat<T>().data(), nullptr, act_Wx.data(),
+        dgamma->SubSlice(0).unaligned_flat<T>().data(), nullptr,
         act_Wx_norm_cache.data());
 
     layer_norm::BackwardPass<T> layer_norm2(
-        time_steps * batch_size,
-        hidden_size * 4,
-        gamma.SubSlice(1).unaligned_flat<T>().data(),
-        nullptr,
-        act_Rh.data(),
-        dgamma->SubSlice(1).unaligned_flat<T>().data(),
-        nullptr,
+        time_steps * batch_size, hidden_size * 4,
+        gamma.SubSlice(1).unaligned_flat<T>().data(), nullptr, act_Rh.data(),
+        dgamma->SubSlice(1).unaligned_flat<T>().data(), nullptr,
         act_Rh_norm_cache.data());
 
     layer_norm::BackwardPass<T> layer_norm3(
-        time_steps * batch_size,
-        hidden_size,
-        gamma_h.flat<T>().data(),
+        time_steps * batch_size, hidden_size, gamma_h.flat<T>().data(),
         beta_h.flat<T>().data(),
         c_vector.SubSlice(1).unaligned_flat<T>().data(),
-        dgamma_h->flat<T>().data(),
-        dbeta_h->flat<T>().data(),
+        dgamma_h->flat<T>().data(), dbeta_h->flat<T>().data(),
         act_c_norm_cache.data());
 
-    layer_norm_lstm::BackwardPass<T> lstm(
-        batch_size,
-        input_size,
-        hidden_size,
-        GetCublasHandle(context));
+    layer_norm_lstm::BackwardPass<T> lstm(batch_size, input_size, hidden_size,
+                                          GetCublasHandle(context));
 
-    lstm.Run(
-        time_steps,
-        kernel.flat<T>().data(),
-        recurrent_kernel.flat<T>().data(),
-        bias.flat<T>().data(),
-        input.flat<T>().data(),
-        h_vector.flat<T>().data(),
-        c_vector.flat<T>().data(),
-        dh_new.flat<T>().data(),
-        dc_new.flat<T>().data(),
-        dx->flat<T>().data(),
-        dW->flat<T>().data(),
-        dR->flat<T>().data(),
-        db->flat<T>().data(),
-        dh.flat<T>().data(),
-        dc.flat<T>().data(),
-        act_Wx.data(),
-        layer_norm1,
-        act_Wx_norm.data(),
-        act_Rh.data(),
-        layer_norm2,
-        layer_norm3,
-        act_c_norm.data(),
-        has_zoneout ? zoneout_mask.flat<T>().data() : nullptr);
+    lstm.Run(time_steps, kernel.flat<T>().data(),
+             recurrent_kernel.flat<T>().data(), bias.flat<T>().data(),
+             input.flat<T>().data(), h_vector.flat<T>().data(),
+             c_vector.flat<T>().data(), dh_new.flat<T>().data(),
+             dc_new.flat<T>().data(), dx->flat<T>().data(),
+             dW->flat<T>().data(), dR->flat<T>().data(), db->flat<T>().data(),
+             dh.flat<T>().data(), dc.flat<T>().data(), act_Wx.data(),
+             layer_norm1, act_Wx_norm.data(), act_Rh.data(), layer_norm2,
+             layer_norm3, act_c_norm.data(),
+             has_zoneout ? zoneout_mask.flat<T>().data() : nullptr);
   }
 };
 

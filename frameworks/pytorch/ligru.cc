@@ -23,19 +23,15 @@
 
 namespace {
 
-using haste::v0::ligru::ForwardPass;
 using haste::v0::ligru::BackwardPass;
+using haste::v0::ligru::ForwardPass;
 
-// namespace layer_norm = haste::v0::layer_norm; 
+// namespace layer_norm = haste::v0::layer_norm;
 
 using torch::Tensor;
 
-std::vector<Tensor> ligru_forward(
-    bool training,
-    Tensor wx, 
-    Tensor h_init, 
-    Tensor u
-) {
+std::vector<Tensor> ligru_forward(bool training, Tensor wx, Tensor h_init,
+                                  Tensor u) {
 
   const auto seq_length = wx.size(0);
   const auto batch_size = wx.size(1);
@@ -49,93 +45,73 @@ std::vector<Tensor> ligru_forward(
   const auto options = wx.options();
   const at::cuda::CUDAGuard guard(options.device_index());
 
-  Tensor output = torch::empty({ seq_length + 1, batch_size, hidden_size }, options);
-  Tensor cache = torch::empty({ seq_length, batch_size, hidden_size * 3 }, options);
-  // Tensor tmp_wx = torch::zeros({ seq_length, batch_size, hidden_size * 2 }, options);
-  Tensor tmp_uh = torch::zeros({ batch_size, hidden_size * 2 }, options);
- 
+  Tensor output =
+      torch::empty({seq_length + 1, batch_size, hidden_size}, options);
+  Tensor cache =
+      torch::empty({seq_length, batch_size, hidden_size * 3}, options);
+  // Tensor tmp_wx = torch::zeros({ seq_length, batch_size, hidden_size * 2 },
+  // options);
+  Tensor tmp_uh = torch::zeros({batch_size, hidden_size * 2}, options);
+
   output[0] = h_init;
 
-  AT_DISPATCH_FLOATING_TYPES_AND_HALF(wx.scalar_type(), "ligru_forward", ([&] {
-    
-    ForwardPass<typename native_type<scalar_t>::T> forward(
-        training,
-        batch_size,
-        0,
-        hidden_size,
-        at::cuda::getCurrentCUDABlasHandle(),
-        at::cuda::getCurrentCUDAStream());
+  AT_DISPATCH_FLOATING_TYPES_AND_HALF(
+      wx.scalar_type(), "ligru_forward", ([&] {
+        ForwardPass<typename native_type<scalar_t>::T> forward(
+            training, batch_size, 0, hidden_size,
+            at::cuda::getCurrentCUDABlasHandle(),
+            at::cuda::getCurrentCUDAStream());
 
+        forward.Run(seq_length, ptr<scalar_t>(wx), ptr<scalar_t>(u),
+                    ptr<scalar_t>(output), ptr<scalar_t>(cache),
+                    ptr<scalar_t>(tmp_uh));
+      }));
 
-    forward.Run(
-        seq_length,
-        ptr<scalar_t>(wx),
-        ptr<scalar_t>(u),
-        ptr<scalar_t>(output),
-        ptr<scalar_t>(cache),
-        ptr<scalar_t>(tmp_uh)
-      );
-
-  }));
-
-  return { output, cache };
+  return {output, cache};
 }
 
-std::vector<Tensor> ligru_backward(
-    Tensor wx_t,
-    Tensor u_t,
-    Tensor h,
-    Tensor cache,
-    Tensor grad_out) {
+std::vector<Tensor> ligru_backward(Tensor wx_t, Tensor u_t, Tensor h,
+                                   Tensor cache, Tensor grad_out) {
 
-    const auto input_size = wx_t.size(0);
-    const auto time_steps = wx_t.size(0);
-    const auto batch_size = wx_t.size(1);
-    const auto hidden_size = wx_t.size(2) / 2;
+  const auto input_size = wx_t.size(0);
+  const auto time_steps = wx_t.size(0);
+  const auto batch_size = wx_t.size(1);
+  const auto hidden_size = wx_t.size(2) / 2;
 
-    CHECK_INPUT(wx_t);
-    CHECK_INPUT(u_t);
-    CHECK_INPUT(h);
-    CHECK_INPUT(cache);
-    CHECK_INPUT(grad_out);
+  CHECK_INPUT(wx_t);
+  CHECK_INPUT(u_t);
+  CHECK_INPUT(h);
+  CHECK_INPUT(cache);
+  CHECK_INPUT(grad_out);
 
-    const auto options = wx_t.options();
-    const at::cuda::CUDAGuard guard(options.device_index());
+  const auto options = wx_t.options();
+  const at::cuda::CUDAGuard guard(options.device_index());
 
-    Tensor dwx = torch::zeros({time_steps, batch_size, hidden_size * 2 }, options);
-    Tensor du = torch::zeros({ hidden_size, hidden_size * 2 }, options);
-    Tensor dh = torch::zeros({ batch_size, hidden_size }, options);
+  Tensor dwx = torch::zeros({time_steps, batch_size, hidden_size * 2}, options);
+  Tensor du = torch::zeros({hidden_size, hidden_size * 2}, options);
+  Tensor dh = torch::zeros({batch_size, hidden_size}, options);
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(wx_t.scalar_type(), "ligru_backward", ([&] {
-      
-      BackwardPass<typename native_type<scalar_t>::T> backward(
-          batch_size,
-          input_size,
-          hidden_size,
-          at::cuda::getCurrentCUDABlasHandle(),
-          at::cuda::getCurrentCUDAStream());
+  AT_DISPATCH_FLOATING_TYPES_AND_HALF(
+      wx_t.scalar_type(), "ligru_backward", ([&] {
+        BackwardPass<typename native_type<scalar_t>::T> backward(
+            batch_size, input_size, hidden_size,
+            at::cuda::getCurrentCUDABlasHandle(),
+            at::cuda::getCurrentCUDAStream());
 
-        backward.Run(
-        time_steps,
-        ptr<scalar_t>(wx_t),
-        ptr<scalar_t>(u_t),
-        ptr<scalar_t>(h),
-        ptr<scalar_t>(cache),
-        ptr<scalar_t>(grad_out),
-        ptr<scalar_t>(dwx),
-        ptr<scalar_t>(du),
-        ptr<scalar_t>(dh)
-        );
-      
-    }));
+        backward.Run(time_steps, ptr<scalar_t>(wx_t), ptr<scalar_t>(u_t),
+                     ptr<scalar_t>(h), ptr<scalar_t>(cache),
+                     ptr<scalar_t>(grad_out), ptr<scalar_t>(dwx),
+                     ptr<scalar_t>(du), ptr<scalar_t>(dh));
+      }));
 
-    return {du, dwx, dh};
-    }
+  return {du, dwx, dh};
+}
 
-}  // anonymous namespace
+} // anonymous namespace
 
-void ligru_init(py::module& m) {
-  m.def("ligru_forward", &ligru_forward, "Li-GRU forward", py::call_guard<py::gil_scoped_release>());
-  m.def("ligru_backward", &ligru_backward, "Li-GRU backward", py::call_guard<py::gil_scoped_release>());
-
+void ligru_init(py::module &m) {
+  m.def("ligru_forward", &ligru_forward, "Li-GRU forward",
+        py::call_guard<py::gil_scoped_release>());
+  m.def("ligru_backward", &ligru_backward, "Li-GRU backward",
+        py::call_guard<py::gil_scoped_release>());
 }

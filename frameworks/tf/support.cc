@@ -28,19 +28,18 @@ using Key = std::pair<int, std::thread::id>;
 
 namespace std {
 
-template<>
-struct hash<Key> {
-  size_t operator()(const Key& key) const noexcept {
+template <> struct hash<Key> {
+  size_t operator()(const Key &key) const noexcept {
     const auto h1 = std::hash<Key::first_type>{}(key.first);
     const auto h2 = std::hash<Key::second_type>{}(key.second);
     return h1 ^ (h2 << 1);
   }
 };
 
-}
+} // namespace std
 
 // LOL.
-cublasHandle_t GetCublasHandle(tensorflow::OpKernelContext* context) {
+cublasHandle_t GetCublasHandle(tensorflow::OpKernelContext *context) {
   static std::unordered_map<Key, cublasHandle_t> handle_map;
   static std::mutex mutex;
 
@@ -61,8 +60,10 @@ cublasHandle_t GetCublasHandle(tensorflow::OpKernelContext* context) {
   return i->second;
 }
 
-const cudaStream_t& GetCudaStream(tensorflow::OpKernelContext* context) {
-  const auto ptr =
-      context->op_device_context()->stream()->implementation()->GpuStreamMemberHack();
-  return *reinterpret_cast<const cudaStream_t*>(ptr);
+const cudaStream_t &GetCudaStream(tensorflow::OpKernelContext *context) {
+  const auto ptr = context->op_device_context()
+                       ->stream()
+                       ->implementation()
+                       ->GpuStreamMemberHack();
+  return *reinterpret_cast<const cudaStream_t *>(ptr);
 }

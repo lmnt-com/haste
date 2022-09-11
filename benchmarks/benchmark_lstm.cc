@@ -62,12 +62,8 @@ float TimeLoop(std::function<void()> fn, int iterations) {
   return elapsed_ms / iterations;
 }
 
-float CudnnInference(
-    int sample_size,
-    const Tensor2& W,
-    const Tensor2& R,
-    const Tensor1& b,
-    const Tensor3& x) {
+float CudnnInference(int sample_size, const Tensor2 &W, const Tensor2 &R,
+                     const Tensor1 &b, const Tensor3 &x) {
   const int time_steps = x.dimension(2);
   const int batch_size = x.dimension(1);
   const int input_size = x.dimension(0);
@@ -87,67 +83,44 @@ float CudnnInference(
   // Descriptors all the way down. Nice.
   RnnDescriptor<float> rnn_descriptor(g_cudnn_handle, hidden_size, CUDNN_LSTM);
 
-  TensorDescriptorArray<float> x_descriptors(time_steps, { batch_size, input_size, 1 });
-  TensorDescriptorArray<float> y_descriptors(time_steps, { batch_size, hidden_size, 1 });
+  TensorDescriptorArray<float> x_descriptors(time_steps,
+                                             {batch_size, input_size, 1});
+  TensorDescriptorArray<float> y_descriptors(time_steps,
+                                             {batch_size, hidden_size, 1});
 
-  auto h_descriptor = TensorDescriptor<float>({ 1, batch_size, hidden_size });
-  auto c_descriptor = TensorDescriptor<float>({ 1, batch_size, hidden_size });
-  auto h_out_descriptor = TensorDescriptor<float>({ 1, batch_size, hidden_size });
-  auto c_out_descriptor = TensorDescriptor<float>({ 1, batch_size, hidden_size });
+  auto h_descriptor = TensorDescriptor<float>({1, batch_size, hidden_size});
+  auto c_descriptor = TensorDescriptor<float>({1, batch_size, hidden_size});
+  auto h_out_descriptor = TensorDescriptor<float>({1, batch_size, hidden_size});
+  auto c_out_descriptor = TensorDescriptor<float>({1, batch_size, hidden_size});
 
   size_t workspace_size;
-  cudnnGetRNNWorkspaceSize(
-      g_cudnn_handle,
-      *rnn_descriptor,
-      time_steps,
-      &x_descriptors,
-      &workspace_size);
+  cudnnGetRNNWorkspaceSize(g_cudnn_handle, *rnn_descriptor, time_steps,
+                           &x_descriptors, &workspace_size);
   auto workspace_dev = device_ptr<Tensor1>::NewByteSized(workspace_size);
 
   size_t w_count;
-  cudnnGetRNNParamsSize(
-      g_cudnn_handle,
-      *rnn_descriptor,
-      *&x_descriptors,
-      &w_count,
-      CUDNN_DATA_FLOAT);
+  cudnnGetRNNParamsSize(g_cudnn_handle, *rnn_descriptor, *&x_descriptors,
+                        &w_count, CUDNN_DATA_FLOAT);
 
   auto w_dev = device_ptr<Tensor1>::NewByteSized(w_count);
   FilterDescriptor<float> w_descriptor(w_dev.Size());
 
-  float ms = TimeLoop([&]() {
-    cudnnRNNForwardInference(
-        g_cudnn_handle,
-        *rnn_descriptor,
-        time_steps,
-        &x_descriptors,
-        x_dev.data,
-        *h_descriptor,
-        h_dev.data,
-        *c_descriptor,
-        c_dev.data,
-        *w_descriptor,
-        w_dev.data,
-        &y_descriptors,
-        y_dev.data,
-        *h_out_descriptor,
-        h_out_dev.data,
-        *c_out_descriptor,
-        c_out_dev.data,
-        workspace_dev.data,
-        workspace_size);
-  }, sample_size);
+  float ms = TimeLoop(
+      [&]() {
+        cudnnRNNForwardInference(
+            g_cudnn_handle, *rnn_descriptor, time_steps, &x_descriptors,
+            x_dev.data, *h_descriptor, h_dev.data, *c_descriptor, c_dev.data,
+            *w_descriptor, w_dev.data, &y_descriptors, y_dev.data,
+            *h_out_descriptor, h_out_dev.data, *c_out_descriptor,
+            c_out_dev.data, workspace_dev.data, workspace_size);
+      },
+      sample_size);
   return ms;
 }
 
-float CudnnTrain(
-    int sample_size,
-    const Tensor2& W,
-    const Tensor2& R,
-    const Tensor1& b,
-    const Tensor3& x,
-    const Tensor3& dh,
-    const Tensor3& dc) {
+float CudnnTrain(int sample_size, const Tensor2 &W, const Tensor2 &R,
+                 const Tensor1 &b, const Tensor3 &x, const Tensor3 &dh,
+                 const Tensor3 &dc) {
   const int time_steps = x.dimension(2);
   const int batch_size = x.dimension(1);
   const int input_size = x.dimension(0);
@@ -164,125 +137,67 @@ float CudnnTrain(
   device_ptr<Tensor2> dcx_dev(batch_size * hidden_size);
 
   RnnDescriptor<float> rnn_descriptor(g_cudnn_handle, hidden_size, CUDNN_LSTM);
-  TensorDescriptorArray<float> y_descriptors(time_steps, { batch_size, hidden_size, 1 });
-  TensorDescriptorArray<float> dy_descriptors(time_steps, { batch_size, hidden_size, 1 });
-  TensorDescriptorArray<float> dx_descriptors(time_steps, { batch_size, input_size, 1 });
+  TensorDescriptorArray<float> y_descriptors(time_steps,
+                                             {batch_size, hidden_size, 1});
+  TensorDescriptorArray<float> dy_descriptors(time_steps,
+                                              {batch_size, hidden_size, 1});
+  TensorDescriptorArray<float> dx_descriptors(time_steps,
+                                              {batch_size, input_size, 1});
 
-  TensorDescriptor<float> dhy_descriptor({ 1, batch_size, hidden_size });
-  TensorDescriptor<float> dcy_descriptor({ 1, batch_size, hidden_size });
-  TensorDescriptor<float> hx_descriptor({ 1, batch_size, hidden_size });
-  TensorDescriptor<float> cx_descriptor({ 1, batch_size, hidden_size });
-  TensorDescriptor<float> dhx_descriptor({ 1, batch_size, hidden_size });
-  TensorDescriptor<float> dcx_descriptor({ 1, batch_size, hidden_size });
+  TensorDescriptor<float> dhy_descriptor({1, batch_size, hidden_size});
+  TensorDescriptor<float> dcy_descriptor({1, batch_size, hidden_size});
+  TensorDescriptor<float> hx_descriptor({1, batch_size, hidden_size});
+  TensorDescriptor<float> cx_descriptor({1, batch_size, hidden_size});
+  TensorDescriptor<float> dhx_descriptor({1, batch_size, hidden_size});
+  TensorDescriptor<float> dcx_descriptor({1, batch_size, hidden_size});
 
   size_t workspace_size = 0;
-  cudnnGetRNNWorkspaceSize(
-      g_cudnn_handle,
-      *rnn_descriptor,
-      time_steps,
-      &dx_descriptors,
-      &workspace_size);
+  cudnnGetRNNWorkspaceSize(g_cudnn_handle, *rnn_descriptor, time_steps,
+                           &dx_descriptors, &workspace_size);
   auto workspace_dev = device_ptr<Tensor1>::NewByteSized(workspace_size);
 
   size_t w_count = 0;
-  cudnnGetRNNParamsSize(
-      g_cudnn_handle,
-      *rnn_descriptor,
-      *&dx_descriptors,
-      &w_count,
-      CUDNN_DATA_FLOAT);
+  cudnnGetRNNParamsSize(g_cudnn_handle, *rnn_descriptor, *&dx_descriptors,
+                        &w_count, CUDNN_DATA_FLOAT);
 
   auto w_dev = device_ptr<Tensor1>::NewByteSized(w_count);
   FilterDescriptor<float> w_descriptor(w_dev.Size());
 
   size_t reserve_size = 0;
-  cudnnGetRNNTrainingReserveSize(
-      g_cudnn_handle,
-      *rnn_descriptor,
-      time_steps,
-      &dx_descriptors,
-      &reserve_size);
+  cudnnGetRNNTrainingReserveSize(g_cudnn_handle, *rnn_descriptor, time_steps,
+                                 &dx_descriptors, &reserve_size);
   auto reserve_dev = device_ptr<Tensor1>::NewByteSized(reserve_size);
 
-  float ms = TimeLoop([&]() {
-    cudnnRNNForwardTraining(
-        g_cudnn_handle,
-        *rnn_descriptor,
-        time_steps,
-        &dx_descriptors,
-        dx_dev.data,
-        *hx_descriptor,
-        hx_dev.data,
-        *cx_descriptor,
-        cx_dev.data,
-        *w_descriptor,
-        w_dev.data,
-        &y_descriptors,
-        y_dev.data,
-        *dhy_descriptor,
-        dhy_dev.data,
-        *dcy_descriptor,
-        dcy_dev.data,
-        workspace_dev.data,
-        workspace_size,
-        reserve_dev.data,
-        reserve_size);
+  float ms = TimeLoop(
+      [&]() {
+        cudnnRNNForwardTraining(
+            g_cudnn_handle, *rnn_descriptor, time_steps, &dx_descriptors,
+            dx_dev.data, *hx_descriptor, hx_dev.data, *cx_descriptor,
+            cx_dev.data, *w_descriptor, w_dev.data, &y_descriptors, y_dev.data,
+            *dhy_descriptor, dhy_dev.data, *dcy_descriptor, dcy_dev.data,
+            workspace_dev.data, workspace_size, reserve_dev.data, reserve_size);
 
-    cudnnRNNBackwardData(
-        g_cudnn_handle,
-        *rnn_descriptor,
-        time_steps,
-        &y_descriptors,
-        y_dev.data,
-        &dy_descriptors,
-        dy_dev.data,
-        *dhy_descriptor,
-        dhy_dev.data,
-        *dcy_descriptor,
-        dcy_dev.data,
-        *w_descriptor,
-        w_dev.data,
-        *hx_descriptor,
-        hx_dev.data,
-        *cx_descriptor,
-        cx_dev.data,
-        &dx_descriptors,
-        dx_dev.data,
-        *dhx_descriptor,
-        dhx_dev.data,
-        *dcx_descriptor,
-        dcx_dev.data,
-        workspace_dev.data,
-        workspace_size,
-        reserve_dev.data,
-        reserve_size);
+        cudnnRNNBackwardData(
+            g_cudnn_handle, *rnn_descriptor, time_steps, &y_descriptors,
+            y_dev.data, &dy_descriptors, dy_dev.data, *dhy_descriptor,
+            dhy_dev.data, *dcy_descriptor, dcy_dev.data, *w_descriptor,
+            w_dev.data, *hx_descriptor, hx_dev.data, *cx_descriptor,
+            cx_dev.data, &dx_descriptors, dx_dev.data, *dhx_descriptor,
+            dhx_dev.data, *dcx_descriptor, dcx_dev.data, workspace_dev.data,
+            workspace_size, reserve_dev.data, reserve_size);
 
-    cudnnRNNBackwardWeights(
-        g_cudnn_handle,
-        *rnn_descriptor,
-        time_steps,
-        &dx_descriptors,
-        dx_dev.data,
-        *hx_descriptor,
-        hx_dev.data,
-        &y_descriptors,
-        y_dev.data,
-        workspace_dev.data,
-        workspace_size,
-        *w_descriptor,
-        w_dev.data,
-        reserve_dev.data,
-        reserve_size);
-  }, sample_size);
+        cudnnRNNBackwardWeights(
+            g_cudnn_handle, *rnn_descriptor, time_steps, &dx_descriptors,
+            dx_dev.data, *hx_descriptor, hx_dev.data, &y_descriptors,
+            y_dev.data, workspace_dev.data, workspace_size, *w_descriptor,
+            w_dev.data, reserve_dev.data, reserve_size);
+      },
+      sample_size);
   return ms;
 }
 
-float HasteInference(
-    int sample_size,
-    const Tensor2& W,
-    const Tensor2& R,
-    const Tensor1& b,
-    const Tensor3& x) {
+float HasteInference(int sample_size, const Tensor2 &W, const Tensor2 &R,
+                     const Tensor1 &b, const Tensor3 &x) {
   const int time_steps = x.dimension(2);
   const int batch_size = x.dimension(1);
   const int input_size = x.dimension(0);
@@ -304,47 +219,31 @@ float HasteInference(
 
   // Settle down the GPU and off we go!
   cudaDeviceSynchronize();
-  float ms = TimeLoop([&]() {
-    ForwardPass<float> forward(
-        false,
-        batch_size,
-        input_size,
-        hidden_size,
-        g_blas_handle);
+  float ms = TimeLoop(
+      [&]() {
+        ForwardPass<float> forward(false, batch_size, input_size, hidden_size,
+                                   g_blas_handle);
 
-    forward.Run(
-        time_steps,
-        W_dev.data,
-        R_dev.data,
-        b_dev.data,
-        x_dev.data,
-        h_dev.data,
-        c_dev.data,
-        v_dev.data,
-        tmp_Rh_dev.data,
-        0.0f,
-        nullptr);
-  }, sample_size);
+        forward.Run(time_steps, W_dev.data, R_dev.data, b_dev.data, x_dev.data,
+                    h_dev.data, c_dev.data, v_dev.data, tmp_Rh_dev.data, 0.0f,
+                    nullptr);
+      },
+      sample_size);
   return ms;
 }
 
-float HasteTrain(
-    int sample_size,
-    const Tensor2& W,
-    const Tensor2& R,
-    const Tensor1& b,
-    const Tensor3& x,
-    const Tensor3& dh,
-    const Tensor3& dc) {
+float HasteTrain(int sample_size, const Tensor2 &W, const Tensor2 &R,
+                 const Tensor1 &b, const Tensor3 &x, const Tensor3 &dh,
+                 const Tensor3 &dc) {
   const int time_steps = x.dimension(2);
   const int batch_size = x.dimension(1);
   const int input_size = x.dimension(0);
   const int hidden_size = R.dimension(1);
 
-  Eigen::array<int, 3> transpose_x({ 1, 2, 0 });
+  Eigen::array<int, 3> transpose_x({1, 2, 0});
   Tensor3 x_t = x.shuffle(transpose_x);
 
-  Eigen::array<int, 2> transpose({ 1, 0 });
+  Eigen::array<int, 2> transpose({1, 0});
   Tensor2 W_t = W.shuffle(transpose);
   Tensor2 R_t = R.shuffle(transpose);
 
@@ -379,118 +278,76 @@ float HasteTrain(
   dh_dev.zero();
   dc_dev.zero();
 
-  ForwardPass<float> forward(
-      true,
-      batch_size,
-      input_size,
-      hidden_size,
-      g_blas_handle);
+  ForwardPass<float> forward(true, batch_size, input_size, hidden_size,
+                             g_blas_handle);
 
-  BackwardPass<float> backward(
-      batch_size,
-      input_size,
-      hidden_size,
-      g_blas_handle);
+  BackwardPass<float> backward(batch_size, input_size, hidden_size,
+                               g_blas_handle);
 
   static const float alpha = 1.0f;
   static const float beta = 0.0f;
 
   cudaDeviceSynchronize();
-  float ms = TimeLoop([&]() {
-    forward.Run(
-        time_steps,
-        W_dev.data,
-        R_dev.data,
-        b_dev.data,
-        x_dev.data,
-        h_dev.data,
-        c_dev.data,
-        v_dev.data,
-        tmp_Rh_dev.data,
-        0.0f,
-        nullptr);
+  float ms = TimeLoop(
+      [&]() {
+        forward.Run(time_steps, W_dev.data, R_dev.data, b_dev.data, x_dev.data,
+                    h_dev.data, c_dev.data, v_dev.data, tmp_Rh_dev.data, 0.0f,
+                    nullptr);
 
-    // Haste needs `x`, `W`, and `R` to be transposed between the forward
-    // pass and backward pass. Add these transposes in here to get a fair
-    // measurement of the overall time it takes to run an entire training
-    // loop.
-    cublasSgeam(
-        g_blas_handle,
-        CUBLAS_OP_T, CUBLAS_OP_N,
-        batch_size * time_steps, input_size,
-        &alpha,
-        x_dev.data, input_size,
-        &beta,
-        x_dev.data, batch_size * time_steps,
-        x_t_dev.data, batch_size * time_steps);
+        // Haste needs `x`, `W`, and `R` to be transposed between the forward
+        // pass and backward pass. Add these transposes in here to get a fair
+        // measurement of the overall time it takes to run an entire training
+        // loop.
+        cublasSgeam(g_blas_handle, CUBLAS_OP_T, CUBLAS_OP_N,
+                    batch_size * time_steps, input_size, &alpha, x_dev.data,
+                    input_size, &beta, x_dev.data, batch_size * time_steps,
+                    x_t_dev.data, batch_size * time_steps);
 
-    cublasSgeam(
-        g_blas_handle,
-        CUBLAS_OP_T, CUBLAS_OP_N,
-        input_size, hidden_size * 4,
-        &alpha,
-        W_dev.data, hidden_size * 4,
-        &beta,
-        W_dev.data, input_size,
-        W_t_dev.data, input_size);
+        cublasSgeam(g_blas_handle, CUBLAS_OP_T, CUBLAS_OP_N, input_size,
+                    hidden_size * 4, &alpha, W_dev.data, hidden_size * 4, &beta,
+                    W_dev.data, input_size, W_t_dev.data, input_size);
 
-    cublasSgeam(
-        g_blas_handle,
-        CUBLAS_OP_T, CUBLAS_OP_N,
-        hidden_size, hidden_size * 4,
-        &alpha,
-        R_dev.data, hidden_size * 4,
-        &beta,
-        R_dev.data, hidden_size,
-        R_t_dev.data, hidden_size);
+        cublasSgeam(g_blas_handle, CUBLAS_OP_T, CUBLAS_OP_N, hidden_size,
+                    hidden_size * 4, &alpha, R_dev.data, hidden_size * 4, &beta,
+                    R_dev.data, hidden_size, R_t_dev.data, hidden_size);
 
-    backward.Run(
-        time_steps,
-        W_t_dev.data,
-        R_t_dev.data,
-        b_dev.data,
-        x_t_dev.data,
-        h_dev.data,
-        c_dev.data,
-        dh_new_dev.data,
-        dc_new_dev.data,
-        dx_dev.data,
-        dW_dev.data,
-        dR_dev.data,
-        db_dev.data,
-        dh_dev.data,
-        dc_dev.data,
-        v_dev.data,
-        nullptr);
-  }, sample_size);
+        backward.Run(time_steps, W_t_dev.data, R_t_dev.data, b_dev.data,
+                     x_t_dev.data, h_dev.data, c_dev.data, dh_new_dev.data,
+                     dc_new_dev.data, dx_dev.data, dW_dev.data, dR_dev.data,
+                     db_dev.data, dh_dev.data, dc_dev.data, v_dev.data,
+                     nullptr);
+      },
+      sample_size);
   return ms;
 }
 
-void usage(const char* name) {
+void usage(const char *name) {
   printf("Usage: %s [OPTION]...\n", name);
   printf("  -h, --help\n");
   printf("  -i, --implementation IMPL <haste|cudnn> (default: haste)\n");
-  printf("  -m, --mode MODE           <inference|training> (default: training)\n");
-  printf("  -s, --sample_size NUM     number of runs to average over (default: %d)\n",
-      DEFAULT_SAMPLE_SIZE);
-  printf("  -t, --time_steps NUM      number of time steps in RNN (default: %d)\n",
+  printf(
+      "  -m, --mode MODE           <inference|training> (default: training)\n");
+  printf("  -s, --sample_size NUM     number of runs to average over (default: "
+         "%d)\n",
+         DEFAULT_SAMPLE_SIZE);
+  printf(
+      "  -t, --time_steps NUM      number of time steps in RNN (default: %d)\n",
       DEFAULT_TIME_STEPS);
 }
 
-int main(int argc, char* const* argv) {
+int main(int argc, char *const *argv) {
   srand(time(0));
 
   cudnnCreate(&g_cudnn_handle);
   cublasCreate(&g_blas_handle);
 
   static struct option long_options[] = {
-    { "help", no_argument, 0, 'h' },
-    { "implementation", required_argument, 0, 'i' },
-    { "mode", required_argument, 0, 'm' },
-    { "sample_size", required_argument, 0, 's' },
-    { "time_steps", required_argument, 0, 't' },
-    { 0, 0, 0, 0 }
-  };
+      {"help", no_argument, 0, 'h'},
+      {"implementation", required_argument, 0, 'i'},
+      {"mode", required_argument, 0, 'm'},
+      {"sample_size", required_argument, 0, 's'},
+      {"time_steps", required_argument, 0, 't'},
+      {0, 0, 0, 0}};
 
   int c;
   int opt_index;
@@ -498,25 +355,26 @@ int main(int argc, char* const* argv) {
   bool haste_flag = true;
   int sample_size = DEFAULT_SAMPLE_SIZE;
   int time_steps = DEFAULT_TIME_STEPS;
-  while ((c = getopt_long(argc, argv, "hi:m:s:t:", long_options, &opt_index)) != -1)
+  while ((c = getopt_long(argc, argv, "hi:m:s:t:", long_options, &opt_index)) !=
+         -1)
     switch (c) {
-      case 'h':
-        usage(argv[0]);
-        return 0;
-      case 'i':
-        if (optarg[0] == 'c' || optarg[0] == 'C')
-          haste_flag = false;
-        break;
-      case 'm':
-        if (optarg[0] == 'i' || optarg[0] == 'I')
-          inference_flag = true;
-        break;
-      case 's':
-        sscanf(optarg, "%d", &sample_size);
-        break;
-      case 't':
-        sscanf(optarg, "%d", &time_steps);
-        break;
+    case 'h':
+      usage(argv[0]);
+      return 0;
+    case 'i':
+      if (optarg[0] == 'c' || optarg[0] == 'C')
+        haste_flag = false;
+      break;
+    case 'm':
+      if (optarg[0] == 'i' || optarg[0] == 'I')
+        inference_flag = true;
+      break;
+    case 's':
+      sscanf(optarg, "%d", &sample_size);
+      break;
+    case 't':
+      sscanf(optarg, "%d", &time_steps);
+      break;
     }
 
   printf("# Benchmark configuration:\n");
@@ -527,9 +385,9 @@ int main(int argc, char* const* argv) {
   printf("#\n");
   printf("# batch_size,hidden_size,input_size,time_ms\n");
 
-  for (const int N : { 1, 16, 32, 64, 128 }) {
-    for (const int H : { 128, 256, 512, 768, 1024, 1536, 2048, 3072, 4096 }) {
-      for (const int C : { 64, 128, 256, 512 }) {
+  for (const int N : {1, 16, 32, 64, 128}) {
+    for (const int H : {128, 256, 512, 768, 1024, 1536, 2048, 3072, 4096}) {
+      for (const int C : {64, 128, 256, 512}) {
         Tensor2 W(H * 4, C);
         Tensor2 R(H * 4, H);
         Tensor1 b(H * 4);

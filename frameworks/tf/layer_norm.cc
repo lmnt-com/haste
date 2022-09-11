@@ -23,8 +23,8 @@
 
 using namespace tensorflow;
 
-using haste::v0::layer_norm::ForwardPass;
 using haste::v0::layer_norm::BackwardPass;
+using haste::v0::layer_norm::ForwardPass;
 using tensorflow::se::Stream;
 using tensorflow::shape_inference::DimensionHandle;
 using tensorflow::shape_inference::InferenceContext;
@@ -37,7 +37,7 @@ REGISTER_OP("HasteLayerNorm")
     .Input("beta: R")
     .Output("y: R")
     .Output("cache: R")
-    .SetShapeFn([](InferenceContext* c) {
+    .SetShapeFn([](InferenceContext *c) {
       ShapeHandle input_shape;
       ShapeHandle gamma_shape;
       ShapeHandle beta_shape;
@@ -51,32 +51,32 @@ REGISTER_OP("HasteLayerNorm")
       return Status::OK();
     });
 
-template<typename T>
-struct HasteLayerNormOp : public OpKernel {
-  explicit HasteLayerNormOp(OpKernelConstruction* context) : OpKernel(context) {}
+template <typename T> struct HasteLayerNormOp : public OpKernel {
+  explicit HasteLayerNormOp(OpKernelConstruction *context)
+      : OpKernel(context) {}
 
-  void Compute(OpKernelContext* context) override {
-    const Tensor& x = context->input(0);
-    const Tensor& gamma = context->input(1);
-    const Tensor& beta = context->input(2);
+  void Compute(OpKernelContext *context) override {
+    const Tensor &x = context->input(0);
+    const Tensor &gamma = context->input(1);
+    const Tensor &beta = context->input(2);
 
     const auto batch_size = x.shape().dim_size(0);
     const auto hidden_size = x.shape().dim_size(1);
 
-    Tensor* y = nullptr;
+    Tensor *y = nullptr;
     OP_REQUIRES_OK(context, context->allocate_output(0, x.shape(), &y));
 
-    Tensor* cache = nullptr;
-    OP_REQUIRES_OK(context, context->allocate_output(1, { batch_size, 2 }, &cache));
+    Tensor *cache = nullptr;
+    OP_REQUIRES_OK(context,
+                   context->allocate_output(1, {batch_size, 2}, &cache));
 
-    ForwardPass<T> forward(
-        batch_size,
-        hidden_size,
-        gamma.flat<T>().data(),
-        beta.shape().dim_size(0) ? beta.flat<T>().data() : nullptr,
-        cache->flat<T>().data());
+    ForwardPass<T> forward(batch_size, hidden_size, gamma.flat<T>().data(),
+                           beta.shape().dim_size(0) ? beta.flat<T>().data()
+                                                    : nullptr,
+                           cache->flat<T>().data());
 
-    forward.Run(GetCudaStream(context), x.flat<T>().data(), y->flat<T>().data());
+    forward.Run(GetCudaStream(context), x.flat<T>().data(),
+                y->flat<T>().data());
   }
 };
 
@@ -93,7 +93,7 @@ REGISTER_OP("HasteLayerNormGrad")
     .Output("dx: R")
     .Output("dgamma: R")
     .Output("dbeta: R")
-    .SetShapeFn([](InferenceContext* c) {
+    .SetShapeFn([](InferenceContext *c) {
       ShapeHandle x_shape;
       ShapeHandle gamma_shape;
       ShapeHandle beta_shape;
@@ -112,45 +112,44 @@ REGISTER_OP("HasteLayerNormGrad")
       return Status::OK();
     });
 
-template<typename T>
-struct HasteLayerNormGradOp : public OpKernel {
-  explicit HasteLayerNormGradOp(OpKernelConstruction* context) : OpKernel(context) {}
+template <typename T> struct HasteLayerNormGradOp : public OpKernel {
+  explicit HasteLayerNormGradOp(OpKernelConstruction *context)
+      : OpKernel(context) {}
 
-  void Compute(OpKernelContext* context) override {
-    const Tensor& x = context->input(0);
-    const Tensor& gamma = context->input(1);
-    const Tensor& beta = context->input(2);
-    const Tensor& dy = context->input(3);
-    const Tensor& cache = context->input(4);
+  void Compute(OpKernelContext *context) override {
+    const Tensor &x = context->input(0);
+    const Tensor &gamma = context->input(1);
+    const Tensor &beta = context->input(2);
+    const Tensor &dy = context->input(3);
+    const Tensor &cache = context->input(4);
 
     const auto batch_size = x.shape().dim_size(0);
     const auto hidden_size = x.shape().dim_size(1);
     const auto cache_shape = context->input(4).shape();
     const auto data_type = DataTypeToEnum<T>::value;
 
-    Tensor* dx = nullptr;
+    Tensor *dx = nullptr;
     OP_REQUIRES_OK(context, context->allocate_output(0, x.shape(), &dx));
 
-    Tensor* dgamma = nullptr;
-    OP_REQUIRES_OK(context, context->allocate_output(1, gamma.shape(), &dgamma));
+    Tensor *dgamma = nullptr;
+    OP_REQUIRES_OK(context,
+                   context->allocate_output(1, gamma.shape(), &dgamma));
 
-    Tensor* dbeta = nullptr;
+    Tensor *dbeta = nullptr;
     OP_REQUIRES_OK(context, context->allocate_output(2, beta.shape(), &dbeta));
 
     cudaMemset(dgamma->flat<T>().data(), 0, dgamma->AllocatedBytes());
     cudaMemset(dbeta->flat<T>().data(), 0, dbeta->AllocatedBytes());
 
     BackwardPass<T> backward(
-        batch_size,
-        hidden_size,
-        gamma.flat<T>().data(),
+        batch_size, hidden_size, gamma.flat<T>().data(),
         beta.shape().dim_size(0) ? beta.flat<T>().data() : nullptr,
-        x.flat<T>().data(),
-        dgamma->flat<T>().data(),
+        x.flat<T>().data(), dgamma->flat<T>().data(),
         beta.shape().dim_size(0) ? dbeta->flat<T>().data() : nullptr,
-        const_cast<T*>(cache.flat<T>().data()));
+        const_cast<T *>(cache.flat<T>().data()));
 
-    backward.Run(GetCudaStream(context), dy.flat<T>().data(), dx->flat<T>().data());
+    backward.Run(GetCudaStream(context), dy.flat<T>().data(),
+                 dx->flat<T>().data());
   }
 };
 

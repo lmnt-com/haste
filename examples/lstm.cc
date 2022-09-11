@@ -45,30 +45,31 @@ constexpr int INPUT_DIMS = 512;
 static cublasHandle_t g_blas_handle;
 
 class ScopeTimer {
-  public:
-    ScopeTimer(const string& msg) : msg_(msg) {
-      cudaEventCreate(&start_);
-      cudaEventCreate(&stop_);
-      cudaDeviceSynchronize();
-      cudaEventRecord(start_);
-    }
+public:
+  ScopeTimer(const string &msg) : msg_(msg) {
+    cudaEventCreate(&start_);
+    cudaEventCreate(&stop_);
+    cudaDeviceSynchronize();
+    cudaEventRecord(start_);
+  }
 
-    ~ScopeTimer() {
-      float elapsed_ms;
-      cudaEventRecord(stop_);
-      cudaEventSynchronize(stop_);
-      cudaEventElapsedTime(&elapsed_ms, start_, stop_);
-      printf("%s %.1fms\n", msg_.c_str(), elapsed_ms);
-      cudaEventDestroy(start_);
-      cudaEventDestroy(stop_);
-    }
+  ~ScopeTimer() {
+    float elapsed_ms;
+    cudaEventRecord(stop_);
+    cudaEventSynchronize(stop_);
+    cudaEventElapsedTime(&elapsed_ms, start_, stop_);
+    printf("%s %.1fms\n", msg_.c_str(), elapsed_ms);
+    cudaEventDestroy(start_);
+    cudaEventDestroy(stop_);
+  }
 
-  private:
-    string msg_;
-    cudaEvent_t start_, stop_;
+private:
+  string msg_;
+  cudaEvent_t start_, stop_;
 };
 
-void LstmInference(const Tensor2& W, const Tensor2& R, const Tensor1& b, const Tensor3& x) {
+void LstmInference(const Tensor2 &W, const Tensor2 &R, const Tensor1 &b,
+                   const Tensor3 &x) {
   const int time_steps = x.dimension(2);
   const int batch_size = x.dimension(1);
   const int input_size = x.dimension(0);
@@ -90,29 +91,18 @@ void LstmInference(const Tensor2& W, const Tensor2& R, const Tensor1& b, const T
 
   ScopeTimer t("Inference:");
 
-  ForwardPass<float> forward(
-      false,  // training
-      batch_size,
-      input_size,
-      hidden_size,
-      g_blas_handle);
+  ForwardPass<float> forward(false, // training
+                             batch_size, input_size, hidden_size,
+                             g_blas_handle);
 
-  forward.Run(
-      time_steps,
-      W_dev.data,
-      R_dev.data,
-      b_dev.data,
-      x_dev.data,
-      h_dev.data,
-      c_dev.data,
-      v_dev.data,
-      tmp_Rh_dev.data,
-      0.0f,      // zoneout prob
-      nullptr);  // zoneout mask
+  forward.Run(time_steps, W_dev.data, R_dev.data, b_dev.data, x_dev.data,
+              h_dev.data, c_dev.data, v_dev.data, tmp_Rh_dev.data,
+              0.0f,     // zoneout prob
+              nullptr); // zoneout mask
 }
 
-void LstmTrain(const Tensor2& W, const Tensor2& R, const Tensor1& b, const Tensor3& x,
-               const Tensor3& dh, const Tensor3& dc) {
+void LstmTrain(const Tensor2 &W, const Tensor2 &R, const Tensor1 &b,
+               const Tensor3 &x, const Tensor3 &dh, const Tensor3 &dc) {
   const int time_steps = x.dimension(2);
   const int batch_size = x.dimension(1);
   const int input_size = x.dimension(0);
@@ -124,9 +114,9 @@ void LstmTrain(const Tensor2& W, const Tensor2& R, const Tensor1& b, const Tenso
   device_ptr<Tensor1> b_dev(b);
   device_ptr<Tensor3> x_dev(x);
 
-  // This is nearly the same as the inference code except we have an extra dimension
-  // for h and c. We'll store those outputs of the cell for all time steps and use
-  // them during the backward pass below.
+  // This is nearly the same as the inference code except we have an extra
+  // dimension for h and c. We'll store those outputs of the cell for all time
+  // steps and use them during the backward pass below.
   device_ptr<Tensor3> h_dev((time_steps + 1) * batch_size * hidden_size);
   device_ptr<Tensor3> c_dev((time_steps + 1) * batch_size * hidden_size);
   device_ptr<Tensor3> v_dev(batch_size * hidden_size * 4 * time_steps);
@@ -137,31 +127,20 @@ void LstmTrain(const Tensor2& W, const Tensor2& R, const Tensor1& b, const Tenso
 
   {
     ScopeTimer t("Train forward:");
-    ForwardPass<float> forward(
-        true,  // training
-        batch_size,
-        input_size,
-        hidden_size,
-        g_blas_handle);
+    ForwardPass<float> forward(true, // training
+                               batch_size, input_size, hidden_size,
+                               g_blas_handle);
 
-    forward.Run(
-        time_steps,
-        W_dev.data,
-        R_dev.data,
-        b_dev.data,
-        x_dev.data,
-        h_dev.data,
-        c_dev.data,
-        v_dev.data,
-        tmp_Rh_dev.data,
-        0.0f,      // zoneout prob
-        nullptr);  // zoneout mask
+    forward.Run(time_steps, W_dev.data, R_dev.data, b_dev.data, x_dev.data,
+                h_dev.data, c_dev.data, v_dev.data, tmp_Rh_dev.data,
+                0.0f,     // zoneout prob
+                nullptr); // zoneout mask
   }
 
-  Eigen::array<int, 3> transpose_x({ 1, 2, 0 });
+  Eigen::array<int, 3> transpose_x({1, 2, 0});
   Tensor3 x_t = x.shuffle(transpose_x);
 
-  Eigen::array<int, 2> transpose({ 1, 0 });
+  Eigen::array<int, 2> transpose({1, 0});
   Tensor2 W_t = W.shuffle(transpose);
   Tensor2 R_t = R.shuffle(transpose);
 
@@ -189,35 +168,19 @@ void LstmTrain(const Tensor2& W, const Tensor2& R, const Tensor1& b, const Tenso
 
   {
     ScopeTimer t("Train backward:");
-    BackwardPass<float> backward(
-        batch_size,
-        input_size,
-        hidden_size,
-        g_blas_handle);
+    BackwardPass<float> backward(batch_size, input_size, hidden_size,
+                                 g_blas_handle);
 
-    backward.Run(
-        time_steps,
-        W_t_dev.data,
-        R_t_dev.data,
-        b_dev.data,
-        x_t_dev.data,
-        h_dev.data,
-        c_dev.data,
-        dh_new_dev.data,
-        dc_new_dev.data,
-        dx_dev.data,
-        dW_dev.data,
-        dR_dev.data,
-        db_dev.data,
-        dh_dev.data,
-        dc_dev.data,
-        v_dev.data,
-        nullptr);
+    backward.Run(time_steps, W_t_dev.data, R_t_dev.data, b_dev.data,
+                 x_t_dev.data, h_dev.data, c_dev.data, dh_new_dev.data,
+                 dc_new_dev.data, dx_dev.data, dW_dev.data, dR_dev.data,
+                 db_dev.data, dh_dev.data, dc_dev.data, v_dev.data, nullptr);
   }
 }
 
-void LstmTrainIterative(const Tensor2& W, const Tensor2& R, const Tensor1& b, const Tensor3& x,
-                        const Tensor3& dh, const Tensor3& dc) {
+void LstmTrainIterative(const Tensor2 &W, const Tensor2 &R, const Tensor1 &b,
+                        const Tensor3 &x, const Tensor3 &dh,
+                        const Tensor3 &dc) {
   const int time_steps = x.dimension(2);
   const int batch_size = x.dimension(1);
   const int input_size = x.dimension(0);
@@ -239,37 +202,26 @@ void LstmTrainIterative(const Tensor2& W, const Tensor2& R, const Tensor1& b, co
 
   {
     ScopeTimer t("Train forward (iterative):");
-    ForwardPass<float> forward(
-        true,  // training
-        batch_size,
-        input_size,
-        hidden_size,
-        g_blas_handle);
+    ForwardPass<float> forward(true, // training
+                               batch_size, input_size, hidden_size,
+                               g_blas_handle);
 
     const int NC = batch_size * input_size;
     const int NH = batch_size * hidden_size;
     for (int t = 0; t < time_steps; ++t) {
       forward.Iterate(
-          0,
-          W_dev.data,
-          R_dev.data,
-          b_dev.data,
-          x_dev.data + t * NC,
-          h_dev.data + t * NH,
-          c_dev.data + t * NH,
-          h_dev.data + (t + 1) * NH,
-          c_dev.data + (t + 1) * NH,
-          v_dev.data + t * NH * 4,
-          tmp_Rh_dev.data,
-          0.0f,      // zoneout prob
-          nullptr);  // zoneout mask
+          0, W_dev.data, R_dev.data, b_dev.data, x_dev.data + t * NC,
+          h_dev.data + t * NH, c_dev.data + t * NH, h_dev.data + (t + 1) * NH,
+          c_dev.data + (t + 1) * NH, v_dev.data + t * NH * 4, tmp_Rh_dev.data,
+          0.0f,     // zoneout prob
+          nullptr); // zoneout mask
     }
   }
 
-  Eigen::array<int, 3> transpose_x({ 1, 2, 0 });
+  Eigen::array<int, 3> transpose_x({1, 2, 0});
   Tensor3 x_t = x.shuffle(transpose_x);
 
-  Eigen::array<int, 2> transpose({ 1, 0 });
+  Eigen::array<int, 2> transpose({1, 0});
   Tensor2 W_t = W.shuffle(transpose);
   Tensor2 R_t = R.shuffle(transpose);
 
@@ -297,34 +249,18 @@ void LstmTrainIterative(const Tensor2& W, const Tensor2& R, const Tensor1& b, co
 
   {
     ScopeTimer t("Train backward (iterative):");
-    BackwardPass<float> backward(
-        batch_size,
-        input_size,
-        hidden_size,
-        g_blas_handle);
+    BackwardPass<float> backward(batch_size, input_size, hidden_size,
+                                 g_blas_handle);
 
     const int NC = batch_size * input_size;
     const int NH = batch_size * hidden_size;
     for (int t = time_steps - 1; t >= 0; --t) {
       backward.Iterate(
-          0,
-          W_t_dev.data,
-          R_t_dev.data,
-          b_dev.data,
-          x_t_dev.data + t * NC,
-          h_dev.data + t * NH,
-          c_dev.data + t * NH,
-          c_dev.data + (t + 1) * NH,
-          dh_new_dev.data + t * NH,
-          dc_new_dev.data + t * NH,
-          dx_dev.data + t * NC,
-          dW_dev.data,
-          dR_dev.data,
-          db_dev.data,
-          dh_dev.data,
-          dc_dev.data,
-          v_dev.data + t * NH * 4,
-          nullptr);
+          0, W_t_dev.data, R_t_dev.data, b_dev.data, x_t_dev.data + t * NC,
+          h_dev.data + t * NH, c_dev.data + t * NH, c_dev.data + (t + 1) * NH,
+          dh_new_dev.data + t * NH, dc_new_dev.data + t * NH,
+          dx_dev.data + t * NC, dW_dev.data, dR_dev.data, db_dev.data,
+          dh_dev.data, dc_dev.data, v_dev.data + t * NH * 4, nullptr);
     }
   }
 }

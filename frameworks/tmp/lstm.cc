@@ -23,21 +23,15 @@
 
 namespace {
 
-using haste::v0::lstm::ForwardPass;
 using haste::v0::lstm::BackwardPass;
+using haste::v0::lstm::ForwardPass;
 
 using torch::Tensor;
 
-std::vector<Tensor> lstm_forward(
-    bool training,
-    float zoneout_prob,
-    Tensor x,
-    Tensor h0,
-    Tensor c0,
-    Tensor kernel,
-    Tensor recurrent_kernel,
-    Tensor bias,
-    Tensor zoneout_mask) {
+std::vector<Tensor> lstm_forward(bool training, float zoneout_prob, Tensor x,
+                                 Tensor h0, Tensor c0, Tensor kernel,
+                                 Tensor recurrent_kernel, Tensor bias,
+                                 Tensor zoneout_mask) {
   const auto time_steps = x.size(0);
   const auto batch_size = x.size(1);
   const auto input_size = x.size(2);
@@ -54,51 +48,40 @@ std::vector<Tensor> lstm_forward(
 
   const auto options = x.options();
   const at::cuda::CUDAGuard guard(options.device_index());
-  Tensor output = torch::empty({ time_steps + 1, batch_size, hidden_size }, options);
-  Tensor output_state = torch::empty({ time_steps + 1, batch_size, hidden_size }, options);
-  Tensor cache = torch::empty({ time_steps, batch_size, hidden_size * 4 }, options);
-  Tensor tmp_Rh = torch::empty({ batch_size, hidden_size * 4 }, options);
+  Tensor output =
+      torch::empty({time_steps + 1, batch_size, hidden_size}, options);
+  Tensor output_state =
+      torch::empty({time_steps + 1, batch_size, hidden_size}, options);
+  Tensor cache =
+      torch::empty({time_steps, batch_size, hidden_size * 4}, options);
+  Tensor tmp_Rh = torch::empty({batch_size, hidden_size * 4}, options);
 
   output[0] = h0;
   output_state[0] = c0;
 
-  AT_DISPATCH_FLOATING_TYPES(x.scalar_type(), "lstm_forward", ([&] {
-    ForwardPass<scalar_t> forward(
-        training,
-        batch_size,
-        input_size,
-        hidden_size,
-        at::cuda::getCurrentCUDABlasHandle(),
-        at::cuda::getCurrentCUDAStream());
+  AT_DISPATCH_FLOATING_TYPES(
+      x.scalar_type(), "lstm_forward", ([&] {
+        ForwardPass<scalar_t> forward(training, batch_size, input_size,
+                                      hidden_size,
+                                      at::cuda::getCurrentCUDABlasHandle(),
+                                      at::cuda::getCurrentCUDAStream());
 
-    forward.Run(
-        time_steps,
-        kernel.data_ptr<scalar_t>(),
-        recurrent_kernel.data_ptr<scalar_t>(),
-        bias.data_ptr<scalar_t>(),
-        x.data_ptr<scalar_t>(),
-        output.data_ptr<scalar_t>(),
-        output_state.data_ptr<scalar_t>(),
-        cache.data_ptr<scalar_t>(),
-        tmp_Rh.data_ptr<scalar_t>(),
-        has_zoneout ? zoneout_prob : 0.0f,
-        has_zoneout ? zoneout_mask.data_ptr<scalar_t>() : nullptr);
-  }));
+        forward.Run(
+            time_steps, kernel.data_ptr<scalar_t>(),
+            recurrent_kernel.data_ptr<scalar_t>(), bias.data_ptr<scalar_t>(),
+            x.data_ptr<scalar_t>(), output.data_ptr<scalar_t>(),
+            output_state.data_ptr<scalar_t>(), cache.data_ptr<scalar_t>(),
+            tmp_Rh.data_ptr<scalar_t>(), has_zoneout ? zoneout_prob : 0.0f,
+            has_zoneout ? zoneout_mask.data_ptr<scalar_t>() : nullptr);
+      }));
 
-  return { output, output_state, cache };
+  return {output, output_state, cache};
 }
 
-std::vector<Tensor> lstm_backward(
-    Tensor x_t,
-    Tensor kernel_t,
-    Tensor recurrent_kernel_t,
-    Tensor bias,
-    Tensor zoneout_mask,
-    Tensor h,
-    Tensor c,
-    Tensor cache,
-    Tensor dh_new,
-    Tensor dc_new) {
+std::vector<Tensor> lstm_backward(Tensor x_t, Tensor kernel_t,
+                                  Tensor recurrent_kernel_t, Tensor bias,
+                                  Tensor zoneout_mask, Tensor h, Tensor c,
+                                  Tensor cache, Tensor dh_new, Tensor dc_new) {
   const auto input_size = x_t.size(0);
   const auto time_steps = x_t.size(1);
   const auto batch_size = x_t.size(2);
@@ -118,47 +101,39 @@ std::vector<Tensor> lstm_backward(
 
   const auto options = x_t.options();
   const at::cuda::CUDAGuard guard(options.device_index());
-  Tensor dx = torch::empty({ time_steps, batch_size, input_size }, options);
-  Tensor dW = torch::zeros({ input_size, hidden_size * 4 }, options);
-  Tensor dR = torch::zeros({ hidden_size, hidden_size * 4 }, options);
+  Tensor dx = torch::empty({time_steps, batch_size, input_size}, options);
+  Tensor dW = torch::zeros({input_size, hidden_size * 4}, options);
+  Tensor dR = torch::zeros({hidden_size, hidden_size * 4}, options);
   Tensor db = torch::zeros_like(bias);
-  Tensor dh = torch::zeros({ batch_size, hidden_size }, options);
-  Tensor dc = torch::zeros({ batch_size, hidden_size }, options);
+  Tensor dh = torch::zeros({batch_size, hidden_size}, options);
+  Tensor dc = torch::zeros({batch_size, hidden_size}, options);
 
-  AT_DISPATCH_FLOATING_TYPES(x_t.scalar_type(), "lstm_backward", ([&] {
-    BackwardPass<scalar_t> backward(
-        batch_size,
-        input_size,
-        hidden_size,
-        at::cuda::getCurrentCUDABlasHandle(),
-        at::cuda::getCurrentCUDAStream());
+  AT_DISPATCH_FLOATING_TYPES(
+      x_t.scalar_type(), "lstm_backward", ([&] {
+        BackwardPass<scalar_t> backward(batch_size, input_size, hidden_size,
+                                        at::cuda::getCurrentCUDABlasHandle(),
+                                        at::cuda::getCurrentCUDAStream());
 
-    backward.Run(
-        time_steps,
-        kernel_t.data_ptr<scalar_t>(),
-        recurrent_kernel_t.data_ptr<scalar_t>(),
-        bias.data_ptr<scalar_t>(),
-        x_t.data_ptr<scalar_t>(),
-        h.data_ptr<scalar_t>(),
-        c.data_ptr<scalar_t>(),
-        dh_new.data_ptr<scalar_t>(),
-        dc_new.data_ptr<scalar_t>(),
-        dx.data_ptr<scalar_t>(),
-        dW.data_ptr<scalar_t>(),
-        dR.data_ptr<scalar_t>(),
-        db.data_ptr<scalar_t>(),
-        dh.data_ptr<scalar_t>(),
-        dc.data_ptr<scalar_t>(),
-        cache.data_ptr<scalar_t>(),
-        has_zoneout ? zoneout_mask.data_ptr<scalar_t>() : nullptr);
-  }));
+        backward.Run(time_steps, kernel_t.data_ptr<scalar_t>(),
+                     recurrent_kernel_t.data_ptr<scalar_t>(),
+                     bias.data_ptr<scalar_t>(), x_t.data_ptr<scalar_t>(),
+                     h.data_ptr<scalar_t>(), c.data_ptr<scalar_t>(),
+                     dh_new.data_ptr<scalar_t>(), dc_new.data_ptr<scalar_t>(),
+                     dx.data_ptr<scalar_t>(), dW.data_ptr<scalar_t>(),
+                     dR.data_ptr<scalar_t>(), db.data_ptr<scalar_t>(),
+                     dh.data_ptr<scalar_t>(), dc.data_ptr<scalar_t>(),
+                     cache.data_ptr<scalar_t>(),
+                     has_zoneout ? zoneout_mask.data_ptr<scalar_t>() : nullptr);
+      }));
 
-  return { dx, dh, dc, dW, dR, db };
+  return {dx, dh, dc, dW, dR, db};
 }
 
-}  // anonymous namespace
+} // anonymous namespace
 
-void lstm_init(py::module& m) {
-  m.def("lstm_forward", &lstm_forward, "LSTM forward", py::call_guard<py::gil_scoped_release>());
-  m.def("lstm_backward", &lstm_backward, "LSTM backward", py::call_guard<py::gil_scoped_release>());
+void lstm_init(py::module &m) {
+  m.def("lstm_forward", &lstm_forward, "LSTM forward",
+        py::call_guard<py::gil_scoped_release>());
+  m.def("lstm_backward", &lstm_backward, "LSTM backward",
+        py::call_guard<py::gil_scoped_release>());
 }
