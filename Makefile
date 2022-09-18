@@ -4,7 +4,7 @@ NVCC ?= nvcc -ccbin $(CXX)
 PYTHON ?= python
 
 ifeq ($(OS),Windows_NT)
-LIBHASTE := haste.lib
+LIBHASTE := fast_ligru.lib
 CUDA_HOME ?= $(CUDA_PATH)
 AR := lib
 AR_FLAGS := /nologo /out:$(LIBHASTE)
@@ -21,13 +21,10 @@ LOCAL_CFLAGS := -I/usr/include/eigen3 -I$(CUDA_HOME)/include -Ilib -O3
 LOCAL_LDFLAGS := -L$(CUDA_HOME)/lib64 -L. -lcudart -lcublas
 GPU_ARCH_FLAGS := -gencode arch=compute_37,code=compute_37 -gencode arch=compute_60,code=compute_60 -gencode arch=compute_70,code=compute_70
 
-# Small enough project that we can just recompile all the time	.
-.PHONY: all haste haste_tf haste_pytorch libhaste_tf examples benchmarks clean
 
-all: haste haste_pytorch
+all: haste fast_ligru
 
 haste:
-	
 	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/ligru_1_0_forward_gpu.cu.cc -o lib/ligru_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
 	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/ligru_1_0_backward_gpu.cu.cc -o lib/ligru_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
 	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/layer_norm_forward_gpu.cu.cc -o lib/layer_norm_forward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
@@ -36,8 +33,7 @@ haste:
 	$(NVCC) $(GPU_ARCH_FLAGS) -c lib/ligru_2_0_backward_gpu.cu.cc -o lib/ligru_2_0_backward_gpu.o $(NVCC_FLAGS) $(LOCAL_CFLAGS)
 	$(AR) $(AR_FLAGS) lib/*.o
 
-# Dependencies handled by setup.py
-haste_pytorch:
+fast_ligru:
 	@$(eval TMP := $(shell mktemp -d))
 	@cp -r . $(TMP)
 	@cat build/common.py build/setup.pytorch.py > $(TMP)/setup.py
@@ -49,18 +45,11 @@ dist:
 	@$(eval TMP := $(shell mktemp -d))
 	@cp -r . $(TMP)
 	@cp build/MANIFEST.in $(TMP)
-	@cat build/common.py build/setup.tf.py > $(TMP)/setup.py
-	@(cd $(TMP); $(PYTHON) setup.py -q sdist)
-	@cp $(TMP)/dist/*.tar.gz .
-	@rm -rf $(TMP)
-	@$(eval TMP := $(shell mktemp -d))
-	@cp -r . $(TMP)
-	@cp build/MANIFEST.in $(TMP)
 	@cat build/common.py build/setup.pytorch.py > $(TMP)/setup.py
 	@(cd $(TMP); $(PYTHON) setup.py -q sdist)
 	@cp $(TMP)/dist/*.tar.gz .
 	@rm -rf $(TMP)
 
 clean:
-	rm -fr benchmark_lstm benchmark_gru haste_lstm haste_gru haste_*.whl haste_*.tar.gz
+	rm -fr fast_*.whl
 	find . \( -iname '*.o' -o -iname '*.so' -o -iname '*.a' -o -iname '*.lib' \) -delete
