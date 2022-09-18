@@ -1,25 +1,8 @@
-<div align="center">
-  <img src="https://lmnt.com/assets/haste-logo_social_media.png">
-</div>
-
 --------------------------------------------------------------------------------
 [![GitHub release (latest SemVer including pre-releases)](https://img.shields.io/github/v/release/lmnt-com/haste?include_prereleases)](https://github.com/lmnt-com/haste/releases) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1hzYhcyvbXYMAUwa3515BszSkhx1UUFSt) [![GitHub](https://img.shields.io/github/license/lmnt-com/haste)](LICENSE)
 
-Haste is a CUDA implementation of fused RNN layers with built-in [DropConnect](http://proceedings.mlr.press/v28/wan13.html) and [Zoneout](https://arxiv.org/abs/1606.01305) regularization. These layers are exposed through C++ and Python APIs for easy integration into your own projects or machine learning frameworks.
+This repository is a fork of Haste a library that provide CUDA implementation of RNNs models. We proposed an open-source implementation of the Light Gated Recurrent Units (Li-GRU), an RNN that is three times faster than an Gated Recurrent Units (GRU) and that beats it on multiple Automatic Speech Recognition (ASR) tasks. 
 
-Which RNN types are supported?
-- [GRU](https://en.wikipedia.org/wiki/Gated_recurrent_unit)
-- [IndRNN](http://arxiv.org/abs/1803.04831)
-- [LSTM](https://en.wikipedia.org/wiki/Long_short-term_memory)
-- [Layer Normalized GRU](https://arxiv.org/abs/1607.06450)
-- [Layer Normalized LSTM](https://arxiv.org/abs/1607.06450)
-
-What's included in this project?
-- a standalone C++ API (`libhaste`)
-- a TensorFlow Python API (`haste_tf`)
-- a PyTorch API (`haste_pytorch`)
-- examples for writing your own custom C++ inference / training code using `libhaste`
-- benchmarking programs to evaluate the performance of RNN implementations
 
 For questions or feedback about Haste, please open an issue on GitHub or send us an email at [haste@lmnt.com](mailto:haste@lmnt.com).
 
