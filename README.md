@@ -18,18 +18,17 @@ Once you have the prerequisites, you can install with pip or by building the sou
 
 ### Using pip
 ```
-pip install haste_pytorch
+pip install fast_ligru
 ```
 
 ### Building from source
 ```
-make               # Build everything
-make haste_pytorch # Build PyTorch API
+make fast_ligru
 ```
 
 install it with `pip`:
 ```
-pip install haste_pytorch-*.whl
+pip install fast_ligru-*.whl
 ```
 
 If the CUDA Toolkit that you're building against is not in `/usr/local/cuda`, you must specify the
