@@ -1,5 +1,5 @@
 --------------------------------------------------------------------------------
-[![GitHub release (latest SemVer including pre-releases)](https://img.shields.io/github/v/release/lmnt-com/haste?include_prereleases)](https://github.com/lmnt-com/haste/releases) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1hzYhcyvbXYMAUwa3515BszSkhx1UUFSt) [![GitHub](https://img.shields.io/github/license/lmnt-com/haste)](LICENSE)
+[![GitHub](https://img.shields.io/github/license/lmnt-com/haste)](LICENSE)
 
 This repository is a fork of Haste a library that provide CUDA implementation of RNNs models. We proposed an open-source implementation of the Light Gated Recurrent Units (Li-GRU), an RNN that is three times faster than an Gated Recurrent Units (GRU) and that beats it on multiple Automatic Speech Recognition (ASR) tasks. 
 
