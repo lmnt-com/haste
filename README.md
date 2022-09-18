@@ -16,11 +16,6 @@ Here's what you'll need to get started:
 
 Once you have the prerequisites, you can install with pip or by building the source code.
 
-### Using pip
-```
-pip install fast_ligru
-```
-
 ### Building from source
 ```
 make fast_ligru
