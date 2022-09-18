@@ -26,8 +26,6 @@ namespace {
 using haste::v0::ligru_1_0::BackwardPass;
 using haste::v0::ligru_1_0::ForwardPass;
 
-// namespace layer_norm = haste::v0::layer_norm;
-
 using torch::Tensor;
 
 std::vector<Tensor> ligru_1_0_forward(bool training, Tensor wx, Tensor h_init,
@@ -35,7 +33,6 @@ std::vector<Tensor> ligru_1_0_forward(bool training, Tensor wx, Tensor h_init,
 
   const auto seq_length = wx.size(0);
   const auto batch_size = wx.size(1);
-  // const auto input_size = x.size(2);
   const auto hidden_size = h_init.size(1);
 
   CHECK_INPUT(wx);
@@ -49,8 +46,6 @@ std::vector<Tensor> ligru_1_0_forward(bool training, Tensor wx, Tensor h_init,
       torch::empty({seq_length + 1, batch_size, hidden_size}, options);
   Tensor cache =
       torch::empty({seq_length, batch_size, hidden_size * 3}, options);
-  // Tensor tmp_wx = torch::zeros({ seq_length, batch_size, hidden_size * 2 },
-  // options);
   Tensor tmp_uh = torch::zeros({batch_size, hidden_size * 2}, options);
 
   output[0] = h_init;
