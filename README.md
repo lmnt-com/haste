@@ -39,7 +39,7 @@ CUDA_HOME=/usr/local/cuda-10.2 make
 ```
 
 ## References
-1. Ravanelli, M., Brakel, P., Omologo, M., & Bengio, Y. (2018). Light Gated Recurrent Units for Speech Recognition. arXiv. (https://doi.org/10.1109/TETCI.2017.2762739)[Ravanelli, M., Brakel, P., Omologo, M., & Bengio, Y. (2018). Light Gated Recurrent Units for Speech Recognition. arXiv. https://doi.org/10.1109/TETCI.2017.2762739]
+1. Ravanelli, M., Brakel, P., Omologo, M., & Bengio, Y. (2018). Light Gated Recurrent Units for Speech Recognition. arXiv. (https://doi.org/10.1109/TETCI.2017.2762739)
 
 ## Citing this work
 To cite this work, please use the following BibTeX entry:
