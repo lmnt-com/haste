@@ -4,7 +4,7 @@ NVCC ?= nvcc -ccbin $(CXX)
 PYTHON ?= python
 
 ifeq ($(OS),Windows_NT)
-LIBHASTE := fast_ligru.lib
+LIBHASTE := libhaste.lib
 CUDA_HOME ?= $(CUDA_PATH)
 AR := lib
 AR_FLAGS := /nologo /out:$(LIBHASTE)
