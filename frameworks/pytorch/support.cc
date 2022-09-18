@@ -17,10 +17,10 @@
 
 #include <torch/extension.h>
 
-void ligru_init(py::module &);
+void ligru_1_0_init(py::module &);
 void ligru_2_0_init(py::module &);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   ligru_2_0_init(m);
-  ligru_init(m);
+  ligru_1_0_init(m);
 }

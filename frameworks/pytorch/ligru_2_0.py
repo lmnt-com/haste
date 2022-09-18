@@ -17,7 +17,7 @@ class ApplyLiGRUCell(torch.autograd.Function):
             h.contiguous(),
             u.T.contiguous(),
         )
-        
+
         ctx.save_for_backward(
             output, 
             cache, 
@@ -257,6 +257,8 @@ class LiGRU_Layer(torch.nn.Module):
         self.w = nn.Linear(self.input_size, 2 * self.hidden_size, bias=False)
 
         self.u = nn.Linear(self.hidden_size, 2 * self.hidden_size, bias=False)
+
+        self.recurrent_norm = nn.LayerNorm(2 * hidden_size, elementwise_affine=False)
         
         if self.bidirectional:
             self.batch_size = self.batch_size * 2
@@ -334,7 +336,7 @@ class LiGRU_Layer(torch.nn.Module):
 
         # Loop over time axis
         for k in range(w.shape[1]):
-            gates = w[:, k] + self.u(ht)
+            gates = w[:, k] + self.recurrent_norm(self.u(ht))
             at, zt = gates.chunk(2, 1)
             zt = torch.sigmoid(zt)
             hcand = self.act(at)
