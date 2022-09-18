@@ -41,14 +41,14 @@ with open(f'frameworks/pytorch/_version.py', 'wt') as f:
   f.write(f'__version__ = "{VERSION}"')
 
 extension = cpp_extension.CUDAExtension(
-    'haste_pytorch_lib',
+    'fast_ligru',
     sources = glob('frameworks/pytorch/*.cc'),
     extra_compile_args = extra_args,
     include_dirs = [os.path.join(base_path, 'lib'), os.path.join(CUDA_HOME, 'include')],
     libraries = ['haste'],
     library_dirs = ['.'])
 
-setup(name = 'haste_pytorch',
+setup(name = 'fast_ligru',
     version = VERSION,
     description = DESCRIPTION,
     long_description = open('README.md', 'r',encoding='utf-8').read(),
@@ -57,7 +57,7 @@ setup(name = 'haste_pytorch',
     author_email = AUTHOR_EMAIL,
     url = URL,
     license = LICENSE,
-    keywords = 'pytorch machine learning rnn lstm gru custom op',
+    keywords = 'pytorch deep learning ligru custom op',
     packages = ['haste_pytorch'],
     package_dir = { 'haste_pytorch': 'frameworks/pytorch' },
     install_requires = [],

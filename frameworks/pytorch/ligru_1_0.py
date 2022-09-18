@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from typing import Optional
-import haste_pytorch_lib as LIB
+import fast_ligru as LIB
 
 
 class ApplyLiGRUCell(torch.autograd.Function):

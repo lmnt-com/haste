@@ -1,6 +1,4 @@
 include Makefile
-include frameworks/tf/*.h
-include frameworks/tf/*.cc
 include frameworks/pytorch/*.h
 include frameworks/pytorch/*.cc
 include lib/*.cc
