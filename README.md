@@ -4,7 +4,7 @@
 This repository is a fork of Haste a library that provide CUDA implementation of RNNs models. We proposed an open-source implementation of the Light Gated Recurrent Units (Li-GRU), an RNN that is three times faster than an Gated Recurrent Units (GRU) and that beats it on multiple Automatic Speech Recognition (ASR) tasks. 
 
 
-For questions or feedback about Haste, please open an issue on GitHub or send us an email at [haste@lmnt.com](mailto:haste@lmnt.com).
+For questions or feedback about `fast_ligru`, please open an issue on GitHub or send us an email at [adel.moumen@alumni.univ-avignon.fr](mailto:adel.moumen@alumni.univ-avignon.fr).
 
 ## Install
 Here's what you'll need to get started:
