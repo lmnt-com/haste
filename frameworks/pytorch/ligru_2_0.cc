@@ -1,3 +1,5 @@
+// Copyright 2022 Adel Moumen, All Rights Reserved.
+
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <torch/extension.h>

@@ -1,7 +1,9 @@
 --------------------------------------------------------------------------------
 [![GitHub](https://img.shields.io/github/license/lmnt-com/haste)](LICENSE)
 
-`fast_ligru` is an open-source and all-in-one CUDA implementation of the Light Gated Recurrent Units (Li-GRU) based on top of `Haste` a CUDA RNN library.
+`fast_ligru` is an open-source CUDA implementation of the [Light Gated Recurrent Units](https://arxiv.org/abs/1803.10225) that works with `PyTorch`. 
+The project is based on top of [Haste](https://github.com/lmnt-com/haste). 
+
 
 For questions or feedback about `fast_ligru`, please open an issue on GitHub or send us an email at [adel.moumen@alumni.univ-avignon.fr](mailto:adel.moumen@alumni.univ-avignon.fr).
 
