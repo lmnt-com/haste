@@ -20,7 +20,7 @@
 
 namespace haste {
 namespace v0 {
-namespace ligru {
+namespace ligru_1_0 {
 
 template <typename T> class ForwardPass {
 public:
@@ -72,6 +72,6 @@ private:
   private_data *data_;
 };
 
-} // namespace ligru
+} // namespace ligru_1_0
 } // namespace v0
 } // namespace haste

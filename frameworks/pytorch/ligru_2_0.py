@@ -16,8 +16,8 @@ class ApplyLiGRUCell(torch.autograd.Function):
             wx.contiguous(),
             h.contiguous(),
             u.T.contiguous(),
-
         )
+        
         ctx.save_for_backward(
             output, 
             cache, 

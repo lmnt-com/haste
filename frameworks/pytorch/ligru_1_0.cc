@@ -18,13 +18,13 @@
 #include <torch/extension.h>
 #include <vector>
 
-#include "ligru.h"
+#include "ligru_1_0.h"
 #include "support.h"
 
 namespace {
 
-using haste::v0::ligru::BackwardPass;
-using haste::v0::ligru::ForwardPass;
+using haste::v0::ligru_1_0::BackwardPass;
+using haste::v0::ligru_1_0::ForwardPass;
 
 // namespace layer_norm = haste::v0::layer_norm;
 

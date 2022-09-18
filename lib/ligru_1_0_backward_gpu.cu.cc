@@ -3,7 +3,7 @@
 
 #include "blas.h"
 #include "device_assert.h"
-#include "ligru.h"
+#include "ligru_1_0.h"
 #include "inline_ops.h"
 
 // todo: backward of ligru
@@ -59,7 +59,7 @@ __global__ void PointwiseOperations(const int batch_dim, const int hidden_dim,
 
 namespace haste {
 namespace v0 {
-namespace ligru {
+namespace ligru_1_0 {
 
 template <typename T> struct BackwardPass<T>::private_data {
   int batch_size;
