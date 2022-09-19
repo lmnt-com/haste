@@ -4,7 +4,7 @@
 `fast_ligru` is an open-source CUDA implementation of the [Light Gated Recurrent Units](https://arxiv.org/abs/1803.10225) that works with `PyTorch`. 
 The project is modified from [Haste](https://github.com/lmnt-com/haste). 
 
-We provide two differents implementation: `Li-GRU 1.0` and `Li-GRU 2.0`. The difference rely on the recurrent connection, in the `Li-GRU 2.0` we apply a layer normalisation to reduce the gradient exploding problem. Indeed, the `Li-GRU 1.0` is unstable and in practice cannot be trained on medium to large scale dataset (e.g, LibriSpeech, CommonVoice) while the `Li-GRU 2.0` can.
+We provide two differents implementation: `Li-GRU 1.0` and `Li-GRU 2.0`. The difference rely on the recurrent connection, in the `Li-GRU 2.0` we apply a layer normalisation to reduce the gradient exploding problem. Indeed, the `Li-GRU 1.0` is unstable and in practice cannot be trained on medium to large scale dataset (e.g, LibriSpeech 960h, CommonVoice) while the `Li-GRU 2.0` can.
 
 For questions or feedback about `fast_ligru`, please open an issue on GitHub or send me an email at [adel.moumen@alumni.univ-avignon.fr](mailto:adel.moumen@alumni.univ-avignon.fr).
 
