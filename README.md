@@ -6,7 +6,7 @@ The project is modified from [Haste](https://github.com/lmnt-com/haste).
 
 We provide two differents implementation: `Li-GRU 1.0` and `Li-GRU 2.0`. The difference rely on the recurrent connection, in the `Li-GRU 2.0` we apply a layer normalisation to reduce the gradient exploding problem. Indeed, the `Li-GRU 1.0` is unstable and in practice cannot be trained on medium to large scale dataset (e.g, LibriSpeech 960h, CommonVoice) while the `Li-GRU 2.0` can.
 
-For questions or feedback about `fast_ligru`, please open an issue on GitHub or send me an email at [adel.moumen@alumni.univ-avignon.fr](mailto:adel.moumen@alumni.univ-avignon.fr).
+For questions or feedback about `fast_ligru`, please open an issue on GitHub or send me an email at [adel.moumen@univ-avignon.fr](mailto:adel.moumen@univ-avignon.fr).
 
 ## Install
 Here's what you'll need to get started:
