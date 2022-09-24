@@ -363,22 +363,7 @@ class LiGRU_Layer(torch.nn.Module):
             Linearly transformed input.
         """
 
-        if w.is_cuda:
-            w = w.permute(1, 0, 2)
-
-            output = ApplyLiGRUCell.apply(
-                True, 
-                w, 
-                self.u.weight,
-                ht,
-                self.activation
-            )
-
-            output = output.permute(1, 0, 2)
-
-            return output[:, 1:]
-        else:
-            return self._ligru_cell_cpu(w, ht)
+        return self._ligru_cell_cpu(w, ht)
 
 def rnn_init(module):
     """This function is used to initialize the RNN weight.

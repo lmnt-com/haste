@@ -2,16 +2,3 @@
 *.o
 *.so
 *.whl
-benchmark_lstm
-benchmark_gru
-haste_lstm
-haste_gru
-frameworks/pytorch/__pycache__/base_rnn.cpython-38.pyc
-build/temp.linux-x86_64-3.8/.ninja_deps
-build/temp.linux-x86_64-3.8/.ninja_log
-build/temp.linux-x86_64-3.8/build.ninja
-ligru_cuda.egg-info/top_level.txt
-ligru_cuda.egg-info/dependency_links.txt
-ligru_cuda.egg-info/PKG-INFO
-ligru_cuda.egg-info/SOURCES.txt
-lib/inline_ops.h

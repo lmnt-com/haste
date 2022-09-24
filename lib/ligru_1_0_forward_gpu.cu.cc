@@ -231,7 +231,6 @@ ForwardPass<T>::ForwardPass(const bool training, const int batch_size,
                             const int activation,
                             const cudaStream_t &stream)
     : data_(new private_data) {
-  printf("ForwardPass activation = %d", activation);
   data_->activation = activation; 
   data_->training = training;
   data_->batch_size = batch_size;

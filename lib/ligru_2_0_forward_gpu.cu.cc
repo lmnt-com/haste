@@ -13,7 +13,7 @@
 namespace {
 
 template <typename T, bool Training>
-__global__ void PointwiseOperations(const int batch_dim, const int hidden_dim,
+__global__ void PointwiseOperationsReLU(const int batch_dim, const int hidden_dim,
                                     const T *wx, const T *uh, const T *h,
                                     T *h_out, T *v) {
   const int row = blockDim.x * blockIdx.x + threadIdx.x;
@@ -53,6 +53,129 @@ __global__ void PointwiseOperations(const int batch_dim, const int hidden_dim,
   h_out[output_idx] = cur_h_value;
 }
 
+
+template <typename T, bool Training>
+__global__ void PointwiseOperationsLeakyReLU(const int batch_dim, const int hidden_dim,
+                                    const T *wx, const T *uh, const T *h,
+                                    T *h_out, T *v) {
+  const int row = blockDim.x * blockIdx.x + threadIdx.x;
+  const int col = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (row >= hidden_dim || col >= batch_dim)
+    return;
+
+  const int weight_idx = col * (hidden_dim * 2) + row;
+
+  // Index into the `h` and `h_out` vectors (they have a stride of
+  // `hidden_dim`).
+  const int output_idx = col * hidden_dim + row;
+
+  // Indicies into the Wx and Rh matrices (for each of the u, r, and e
+  // components).
+  const int a_idx = weight_idx + 0 * hidden_dim;
+  const int z_idx = weight_idx + 1 * hidden_dim;
+
+  const T z =
+      sigmoid(wx[z_idx] + uh[z_idx]); // + uh[z_idx] //wx[z_idx] + uh[z_idx]; //
+                                      // sigmoid(wx[z_idx] + uh[z_idx]);
+  const T a = wx[a_idx] + uh[a_idx];  // + uh[a_idx] //+ uh[a_idx];
+
+  const T hcand = leaky_relu(a); // drop_mask[output_idx];
+
+  // Store internal activations if we're eventually going to backprop.
+  if (Training) {
+    const int base_v_idx = col * (hidden_dim * 3) + row;
+    v[base_v_idx + 1 * hidden_dim] = z;
+    v[base_v_idx + 0 * hidden_dim] = a;
+    v[base_v_idx + 2 * hidden_dim] = hcand;
+  }
+
+  T cur_h_value = z * h[output_idx] + (static_cast<T>(1.0) - z) * hcand;
+
+  h_out[output_idx] = cur_h_value;
+}
+
+template <typename T, bool Training>
+__global__ void PointwiseOperationsTanh(const int batch_dim, const int hidden_dim,
+                                    const T *wx, const T *uh, const T *h,
+                                    T *h_out, T *v) {
+  const int row = blockDim.x * blockIdx.x + threadIdx.x;
+  const int col = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (row >= hidden_dim || col >= batch_dim)
+    return;
+
+  const int weight_idx = col * (hidden_dim * 2) + row;
+
+  // Index into the `h` and `h_out` vectors (they have a stride of
+  // `hidden_dim`).
+  const int output_idx = col * hidden_dim + row;
+
+  // Indicies into the Wx and Rh matrices (for each of the u, r, and e
+  // components).
+  const int a_idx = weight_idx + 0 * hidden_dim;
+  const int z_idx = weight_idx + 1 * hidden_dim;
+
+  const T z =
+      sigmoid(wx[z_idx] + uh[z_idx]); // + uh[z_idx] //wx[z_idx] + uh[z_idx]; //
+                                      // sigmoid(wx[z_idx] + uh[z_idx]);
+  const T a = wx[a_idx] + uh[a_idx];  // + uh[a_idx] //+ uh[a_idx];
+
+  const T hcand = tanh(a); // drop_mask[output_idx];
+
+  // Store internal activations if we're eventually going to backprop.
+  if (Training) {
+    const int base_v_idx = col * (hidden_dim * 3) + row;
+    v[base_v_idx + 1 * hidden_dim] = z;
+    v[base_v_idx + 0 * hidden_dim] = a;
+    v[base_v_idx + 2 * hidden_dim] = hcand;
+  }
+
+  T cur_h_value = z * h[output_idx] + (static_cast<T>(1.0) - z) * hcand;
+
+  h_out[output_idx] = cur_h_value;
+}
+
+template <typename T, bool Training>
+__global__ void PointwiseOperationsSin(const int batch_dim, const int hidden_dim,
+                                    const T *wx, const T *uh, const T *h,
+                                    T *h_out, T *v) {
+  const int row = blockDim.x * blockIdx.x + threadIdx.x;
+  const int col = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (row >= hidden_dim || col >= batch_dim)
+    return;
+
+  const int weight_idx = col * (hidden_dim * 2) + row;
+
+  // Index into the `h` and `h_out` vectors (they have a stride of
+  // `hidden_dim`).
+  const int output_idx = col * hidden_dim + row;
+
+  // Indicies into the Wx and Rh matrices (for each of the u, r, and e
+  // components).
+  const int a_idx = weight_idx + 0 * hidden_dim;
+  const int z_idx = weight_idx + 1 * hidden_dim;
+
+  const T z =
+      sigmoid(wx[z_idx] + uh[z_idx]); // + uh[z_idx] //wx[z_idx] + uh[z_idx]; //
+                                      // sigmoid(wx[z_idx] + uh[z_idx]);
+  const T a = wx[a_idx] + uh[a_idx];  // + uh[a_idx] //+ uh[a_idx];
+
+  const T hcand = sin(a); // drop_mask[output_idx];
+
+  // Store internal activations if we're eventually going to backprop.
+  if (Training) {
+    const int base_v_idx = col * (hidden_dim * 3) + row;
+    v[base_v_idx + 1 * hidden_dim] = z;
+    v[base_v_idx + 0 * hidden_dim] = a;
+    v[base_v_idx + 2 * hidden_dim] = hcand;
+  }
+
+  T cur_h_value = z * h[output_idx] + (static_cast<T>(1.0) - z) * hcand;
+
+  h_out[output_idx] = cur_h_value;
+}
 } // anonymous namespace
 
 namespace haste {
@@ -64,6 +187,7 @@ template <typename T> struct ForwardPass<T>::private_data {
   int batch_size;
   int input_size;
   int hidden_size;
+  int activation;
   cublasHandle_t blas_handle;
   cudaStream_t stream[2];
   cudaEvent_t event;
@@ -74,8 +198,10 @@ template <typename T>
 ForwardPass<T>::ForwardPass(const bool training, const int batch_size,
                             const int input_size, const int hidden_size,
                             const cublasHandle_t &blas_handle,
+                            const int activation,
                             const cudaStream_t &stream)
     : data_(new private_data) {
+  data_->activation = activation;
   data_->training = training;
   data_->batch_size = batch_size;
   data_->input_size = input_size;
@@ -131,11 +257,40 @@ void ForwardPass<T>::IterateInternal(const T *u, const T *h, T *h_out, T *v,
   cudaStreamWaitEvent(stream1, event, 0);
 
   if (training) {
-    PointwiseOperations<T, true><<<gridDim, blockDim, 0, stream1>>>(
+    if(data_->activation == 0) {
+      PointwiseOperationsReLU<T, true><<<gridDim, blockDim, 0, stream1>>>(
         batch_size, hidden_size, tmp_wx, tmp_uh_norm, h, h_out, v);
+    }
+    else if (data_->activation == 1)
+    {
+        PointwiseOperationsLeakyReLU<T, true><<<gridDim, blockDim, 0, stream1>>>(
+        batch_size, hidden_size, tmp_wx, tmp_uh_norm, h, h_out, v);    
+    }
+    else if (data_->activation == 2)
+    {
+        PointwiseOperationsSin<T, true><<<gridDim, blockDim, 0, stream1>>>(
+        batch_size, hidden_size, tmp_wx, tmp_uh_norm, h, h_out, v);    
+    }
+    else if (data_->activation == 3)
+    {
+        PointwiseOperationsTanh<T, true><<<gridDim, blockDim, 0, stream1>>>(
+        batch_size, hidden_size, tmp_wx, tmp_uh_norm, h, h_out, v);    
+    }
   } else {
-    PointwiseOperations<T, false><<<gridDim, blockDim, 0, stream1>>>(
-        batch_size, hidden_size, tmp_wx, tmp_uh_norm, h, h_out, v);
+    if(data_->activation == 0) { 
+      PointwiseOperationsReLU<T, false><<<gridDim, blockDim, 0, stream1>>>(
+          batch_size, hidden_size, tmp_wx, tmp_uh_norm, h, h_out, v);
+    }
+    else if (data_->activation == 1)
+    {
+        PointwiseOperationsLeakyReLU<T, false><<<gridDim, blockDim, 0, stream1>>>(
+        batch_size, hidden_size, tmp_wx, tmp_uh_norm, h, h_out, v);    
+    }
+    else if (data_->activation == 3)
+    {
+        PointwiseOperationsTanh<T, false><<<gridDim, blockDim, 0, stream1>>>(
+        batch_size, hidden_size, tmp_wx, tmp_uh_norm, h, h_out, v);    
+    }
   }
 }
 

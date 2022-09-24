@@ -17,7 +17,7 @@ namespace layer_norm_ligru = haste::v0::ligru_2_0;
 using torch::Tensor;
 
 std::vector<Tensor> ligru_2_0_forward(bool training, Tensor wx, Tensor h_init,
-                                  Tensor u_t) {
+                                  Tensor u_t, int activation) {
 
   const auto seq_length = wx.size(0);
   const auto batch_size = wx.size(1);
@@ -51,6 +51,7 @@ std::vector<Tensor> ligru_2_0_forward(bool training, Tensor wx, Tensor h_init,
         layer_norm_ligru::ForwardPass<typename native_type<scalar_t>::T>
             forward(training, batch_size, 0, hidden_size,
                     at::cuda::getCurrentCUDABlasHandle(),
+                    activation,
                     at::cuda::getCurrentCUDAStream());
 
         forward.Run(seq_length, wx.data_ptr<scalar_t>(), u_t.data_ptr<scalar_t>(),
@@ -64,7 +65,7 @@ std::vector<Tensor> ligru_2_0_forward(bool training, Tensor wx, Tensor h_init,
 
 std::vector<Tensor> ligru_2_0_backward(Tensor wx, Tensor u, Tensor h,
                                    Tensor cache, Tensor act_uh,
-                                   Tensor act_uh_norm_cache, Tensor grad_out) {
+                                   Tensor act_uh_norm_cache, Tensor grad_out, int activation) {
 
   const auto input_size = wx.size(0);
   const auto time_steps = wx.size(0);
@@ -99,6 +100,7 @@ std::vector<Tensor> ligru_2_0_backward(Tensor wx, Tensor u, Tensor h,
         layer_norm_ligru::BackwardPass<scalar_t> backward(
             batch_size, input_size, hidden_size,
             at::cuda::getCurrentCUDABlasHandle(),
+            activation,
             at::cuda::getCurrentCUDAStream());
 
         backward.Run(time_steps, wx.data_ptr<scalar_t>(),
