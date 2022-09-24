@@ -17,6 +17,7 @@
 
 #include <cublas_v2.h>
 #include <cuda_runtime_api.h>
+#include <string> 
 
 namespace haste {
 namespace v0 {
@@ -31,6 +32,7 @@ public:
   // blas_handle: an initialized cuBLAS handle (see `cublasCreate`).
   ForwardPass(const bool training, const int batch_size, const int input_size,
               const int hidden_size, const cublasHandle_t &blas_handle,
+              const int activation,
               const cudaStream_t &stream = 0);
 
   // Releases internal resources.
@@ -55,6 +57,7 @@ public:
   // blas_handle: an initialized cuBLAS handle (see `cublasCreate`).
   BackwardPass(const int batch_size, const int input_size,
                const int hidden_size, const cublasHandle_t &blas_handle,
+               const int activation,
                const cudaStream_t &stream = 0);
 
   // Releases internal resources.

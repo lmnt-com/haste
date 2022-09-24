@@ -25,8 +25,20 @@ template <typename T> __device__ __forceinline__ T relu(const T x) {
   return (x > static_cast<T>(0.) ? x : static_cast<T>(0.));
 }
 
+template <typename T> __device__ __forceinline__ T leaky_relu(const T x) {
+  return (x > static_cast<T>(0.) ? x : static_cast<T>(0.)) + (x < static_cast<T>(0.) ? x : static_cast<T>(0.)) * static_cast<T>(0.01);
+}
+
 template <typename T> __device__ __forceinline__ T tanh(const T x) {
   return std::tanh(x);
+}
+
+template <typename T> __device__ __forceinline__ T sin(const T x) {
+  return std::sin(x);
+}
+
+template <typename T> __device__ __forceinline__ T d_sin(const T x) {
+  return std::cos(x);
 }
 
 template <typename T>
@@ -40,6 +52,10 @@ template <typename T> __device__ __forceinline__ T d_tanh(const T tanh_output) {
 
 template <typename T> __device__ __forceinline__ T d_relu(const T x) {
   return (x > static_cast<T>(0.) ? static_cast<T>(1.) : static_cast<T>(0.));
+}
+
+template <typename T> __device__ __forceinline__ T d_leaky_relu(const T x) {
+  return (x > static_cast<T>(0.) ? static_cast<T>(1.) : static_cast<T>(0.01));
 }
 
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 600)
@@ -71,4 +87,15 @@ template <> __device__ __forceinline__ half tanh(const half x) {
   return std::tanh(float(x));
 }
 
+template <> __device__ __forceinline__ half sin(const half x) {
+  return std::sin(float(x));
+}
+
+template <> __device__ __forceinline__ half d_sin(const half x) {
+  return std::cos(float(x));
+}
+
+template <> __device__ __forceinline__ half leaky_relu(const half x) {
+  return (x > static_cast<half>(0.) ? x : static_cast<half>(0.)) + (x < static_cast<half>(0.) ? x : static_cast<half>(0.)) * static_cast<half>(0.01);
+}
 #endif

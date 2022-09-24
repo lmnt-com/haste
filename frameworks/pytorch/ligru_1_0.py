@@ -9,13 +9,14 @@ import fast_ligru as LIB
 class ApplyLiGRUCell(torch.autograd.Function):
 
     @staticmethod
-    def forward(ctx, training, wx, u, h):
+    def forward(ctx, training, wx, u, h, activation):
 
         output, cache, = LIB.ligru_1_0_forward(
             training, 
             wx.contiguous(),
             h.contiguous(),
             u.T.contiguous(),
+            activation
         )
         
         ctx.save_for_backward(
@@ -25,6 +26,8 @@ class ApplyLiGRUCell(torch.autograd.Function):
             u, 
             cache
         )
+        
+        ctx.activation = activation
 
         return output
     
@@ -33,15 +36,18 @@ class ApplyLiGRUCell(torch.autograd.Function):
 
         h, cache, wx, u, cache, = ctx.saved_tensors
 
+        activation = ctx.activation 
+
         du, dwx, dh, = LIB.ligru_1_0_backward(
             wx.contiguous(),
             u.contiguous(),
             h,
             cache, 
-            grad_out.contiguous()
+            grad_out.contiguous(),
+            activation
         )
         
-        return None, dwx, du.T, None, None, None 
+        return None, dwx, du.T, None, None, None, None
 
 class LiGRU(torch.nn.Module):
     """ This function implements a Light GRU (liGRU).
@@ -253,8 +259,8 @@ class LiGRU_Layer(torch.nn.Module):
         self.w = nn.Linear(self.input_size, 2 * self.hidden_size, bias=False)
 
         self.u = nn.Linear(self.hidden_size, 2 * self.hidden_size, bias=False)
-        
-        if self.bidirectional:
+
+        if self.bidirectional:  
             self.batch_size = self.batch_size * 2
 
         # Initializing batch norm
@@ -278,12 +284,16 @@ class LiGRU_Layer(torch.nn.Module):
 
         # Setting the activation function
         if nonlinearity == "tanh":
+            self.activation = 3
             self.act = torch.nn.Tanh()
         elif nonlinearity == "sin":
+            self.activation = 2
             self.act = torch.sin
         elif nonlinearity == "leaky_relu":
+            self.activation = 1
             self.act = torch.nn.LeakyReLU()
         else:
+            self.activation = 0
             self.act = torch.nn.ReLU()
 
     def forward(self, x, hx: Optional[Tensor] = None):
@@ -356,7 +366,8 @@ class LiGRU_Layer(torch.nn.Module):
                 True, 
                 w, 
                 self.u.weight,
-                ht
+                ht,
+                self.activation
             )
 
             output = output.permute(1, 0, 2)
@@ -389,7 +400,8 @@ if __name__ == "__main__" :
     print("LIGRU 1.0 HASTE")
     import time 
     inp_tensor = torch.rand([1, 5, 2], requires_grad=False).to("cuda")
-    net = LiGRU(input_shape=inp_tensor.shape, hidden_size=2, num_layers=2, dropout=0.50).to("cuda")
+    net = LiGRU(input_shape=inp_tensor.shape, hidden_size=2, 
+    num_layers=2, dropout=0.50, nonlinearity="tanh").to("cuda")
 
     torch.cuda.synchronize()
     time1 = time.time()
