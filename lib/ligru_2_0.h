@@ -1,4 +1,4 @@
-// Copyright 2020 LMNT, Inc. All Rights Reserved.
+// Copyright 2022 Adel Moumen. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ public:
   // blas_handle: an initialized cuBLAS handle (see `cublasCreate`).
   ForwardPass(const bool training, const int batch_size, const int input_size,
               const int hidden_size, const cublasHandle_t &blas_handle,
+              const int activation,
               const cudaStream_t &stream = 0);
 
   // Releases internal resources.
@@ -39,16 +40,7 @@ public:
 
   void Run(const int time_step, T *wx, const T *u, T *h, T *v,
            layer_norm::ForwardPass<T> &layer_norm1, T *tmp_uh_norm, T *tmp_uh);
-
-  // void Run(
-  //     const int time_step,
-  //     Tensor wx,
-  //     const Tensor u,
-  //     Tensor h,
-  //     Tensor v,
-  //     Tensor tmp_uh,
-  //     const Tensor drop_mask);
-
+           
 private:
   void IterateInternal(const T *u, const T *h, T *h_out, T *v, T *tmp_wx,
                        T *tmp_uh, T *tmp_uh_norm,
@@ -66,6 +58,7 @@ public:
   // blas_handle: an initialized cuBLAS handle (see `cublasCreate`).
   BackwardPass(const int batch_size, const int input_size,
                const int hidden_size, const cublasHandle_t &blas_handle,
+               const int activation,
                const cudaStream_t &stream = 0);
 
   // Releases internal resources.
