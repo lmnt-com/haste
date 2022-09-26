@@ -5,6 +5,9 @@
 --------------------------------------------------------------------------------
 [![GitHub release (latest SemVer including pre-releases)](https://img.shields.io/github/v/release/lmnt-com/haste?include_prereleases)](https://github.com/lmnt-com/haste/releases) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1hzYhcyvbXYMAUwa3515BszSkhx1UUFSt) [![GitHub](https://img.shields.io/github/license/lmnt-com/haste)](LICENSE)
 
+**We're hiring!**
+If you like what we're building here, [come join us at LMNT](https://explore.lmnt.com).
+
 Haste is a CUDA implementation of fused RNN layers with built-in [DropConnect](http://proceedings.mlr.press/v28/wan13.html) and [Zoneout](https://arxiv.org/abs/1606.01305) regularization. These layers are exposed through C++ and Python APIs for easy integration into your own projects or machine learning frameworks.
 
 Which RNN types are supported?
