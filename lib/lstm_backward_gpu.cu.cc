@@ -13,12 +13,14 @@
 // limitations under the License.
 // ==============================================================================
 
-#include <algorithm>
 #include <cublas_v2.h>
 #include <cuda_runtime_api.h>
+
 #include <vector>
+#include <algorithm>
 
 #include "blas.h"
+#include "device_assert.h"
 #include "haste.h"
 #include "inline_ops.h"
 
@@ -94,6 +96,25 @@ void PointwiseOperations(const int batch_dim,
   dv_out[f_idx] = dv_f;
   dv_out[o_idx] = dv_o;
 }
+
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 700)
+template<typename T, bool ApplyZoneout>
+__global__
+void PointwiseOperations(const int batch_dim,
+                         const int hidden_dim,
+                         const half* c,
+                         const half* v,
+                         const half* c_new,
+                         const half* dh_new,
+                         const half* dc_new,
+                         half* db_out,
+                         half* dh_inout,
+                         half* dc_inout,
+                         half* dv_out,
+                         const half* zoneout_mask) {
+  device_assert_fail("FP16 is not supported on compute capability < 7.0.");
+}
+#endif
 
 }  // anonymous namespace
 
@@ -404,6 +425,7 @@ void BackwardPass<T>::Run(
   cublasSetStream(blas_handle, save_stream);
 }
 
+template struct BackwardPass<half>;
 template struct BackwardPass<float>;
 template struct BackwardPass<double>;
 
